@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+function crud<T>(table: string) {
+  return {
+    list: () => ipcRenderer.invoke(`db:${table}:list`) as Promise<T[]>,
+    add: (item: T) => ipcRenderer.invoke(`db:${table}:add`, item) as Promise<T[]>,
+    delete: (id: string) => ipcRenderer.invoke(`db:${table}:delete`, id) as Promise<T[]>,
+    replaceAll: (items: T[]) => ipcRenderer.invoke(`db:${table}:replaceAll`, items) as Promise<T[]>,
+  };
+}
+
 const api = {
   settings: {
     get: (key: string) => ipcRenderer.invoke("settings:get", key),
@@ -17,20 +26,38 @@ const api = {
   },
   google: {
     connect: (clientId: string, clientSecret?: string) =>
-      ipcRenderer.invoke("google:connect", { clientId, clientSecret }) as Promise<{
-        connected: boolean;
-      }>,
-    disconnect: () => ipcRenderer.invoke("google:disconnect") as Promise<boolean>,
-    status: () =>
-      ipcRenderer.invoke("google:status") as Promise<{
-        connected: boolean;
-        expiresAt?: number;
-        scope?: string;
-      }>,
-    listMessages: (limit?: number) =>
-      ipcRenderer.invoke("gmail:listMessages", { limit }) as Promise<unknown[]>,
-    listEvents: (rangeDays?: number) =>
-      ipcRenderer.invoke("gcal:listEvents", { rangeDays }) as Promise<unknown[]>,
+      ipcRenderer.invoke("google:connect", { clientId, clientSecret }),
+    disconnect: () => ipcRenderer.invoke("google:disconnect"),
+    status: () => ipcRenderer.invoke("google:status"),
+    listMessages: (limit?: number) => ipcRenderer.invoke("gmail:listMessages", { limit }),
+    listEvents: (rangeDays?: number) => ipcRenderer.invoke("gcal:listEvents", { rangeDays }),
+  },
+  microsoft: {
+    connect: (clientId: string, clientSecret?: string, tenant?: string) =>
+      ipcRenderer.invoke("microsoft:connect", { clientId, clientSecret, tenant }),
+    disconnect: () => ipcRenderer.invoke("microsoft:disconnect"),
+    status: () => ipcRenderer.invoke("microsoft:status"),
+    listMessages: (limit?: number) => ipcRenderer.invoke("outlook:listMessages", { limit }),
+    listEvents: (rangeDays?: number) => ipcRenderer.invoke("outlook:listEvents", { rangeDays }),
+  },
+  whoop: {
+    connect: (clientId: string, clientSecret?: string) =>
+      ipcRenderer.invoke("whoop:connect", { clientId, clientSecret }),
+    disconnect: () => ipcRenderer.invoke("whoop:disconnect"),
+    status: () => ipcRenderer.invoke("whoop:status"),
+    recovery: () => ipcRenderer.invoke("whoop:recovery"),
+    cycle: () => ipcRenderer.invoke("whoop:cycle"),
+    sleep: () => ipcRenderer.invoke("whoop:sleep"),
+  },
+  garmin: {
+    listEntries: () => ipcRenderer.invoke("garmin:listEntries"),
+    addEntry: (entry: unknown) => ipcRenderer.invoke("garmin:addEntry", entry),
+    deleteEntry: (date: string) => ipcRenderer.invoke("garmin:deleteEntry", date),
+  },
+  db: {
+    finance: crud("finance"),
+    crm: crud("crm"),
+    projects: crud("projects"),
   },
   platform: process.platform,
 };

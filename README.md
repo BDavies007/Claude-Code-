@@ -35,80 +35,86 @@ On first launch you'll be prompted to **create a device PIN**. It's hashed
 (SHA-256) and stored locally — it protects this device only, not your
 third-party accounts.
 
-## What's in v0.1
+## What's in v0.2
 
 | Module        | State    | Notes                                                                   |
 | ------------- | -------- | ----------------------------------------------------------------------- |
 | Morning Brief | Working  | Synthesizes recovery + calendar + inbox into a daily recommendation     |
 | Dashboard     | Mock     | KPI tiles + pipeline placeholder                                        |
-| Health        | Mock     | Whoop + Garmin cards driven by adapter stubs                            |
-| Inbox         | Mock     | Unified Outlook + Gmail list                                            |
-| Calendar      | Mock     | Merged 7-day view                                                       |
-| Finance       | Mock     | Income/expense ledger                                                   |
-| CRM           | Mock     | Accounts table                                                          |
-| Leads/Social  | Mock     | Channel performance                                                     |
-| Projects      | Mock     | Status board                                                            |
-| Settings      | Working  | Theme, PIN reset, configurable integrations                             |
-| Gmail OAuth   | **Working** | PKCE + loopback flow in main process, auto-refresh, live API calls   |
+| Health        | **Working** | Whoop live, Garmin via manual entry form, persistent                 |
+| Inbox         | **Working** | Unified Outlook (Graph) + Gmail, priority-ranked                     |
+| Calendar      | **Working** | Outlook + Google Calendar, 7-day merged view                         |
+| Finance       | **Working** | Income/expense ledger with add/delete, persists across launches      |
+| CRM           | **Working** | Accounts pipeline with add/delete                                    |
+| Leads/Social  | Mock     | Channel performance — no upstream API yet                               |
+| Projects      | **Working** | Status board with add/delete                                         |
+| Settings      | Working  | Theme, PIN reset, per-provider configuration                            |
+| OAuth: Gmail  | **Working** | PKCE + loopback, auto-refresh                                        |
+| OAuth: Outlook | **Working** | PKCE + loopback (Microsoft Identity Platform v2.0)                  |
+| OAuth: Whoop  | **Working** | PKCE + loopback (Whoop developer API)                                |
+| Garmin        | Manual   | API gated; manual daily-metric entry feeds the brief                    |
 
-## Integration roadmap
+## Integrations
 
-Each adapter lives in `src/integrations/<provider>.ts` and implements an
-interface from `src/integrations/types.ts`. The UI already calls these — when
-you replace the mock with a real API client, the entire app lights up.
+All OAuth flows run entirely in the Electron main process
+(`electron/oauth/*.ts`). Tokens never reach the renderer. Each access token
+is automatically refreshed when within 60 seconds of expiry, using the
+stored refresh token. All three OAuth providers share a single PKCE
+implementation (`electron/oauth/pkce.ts`) — a one-shot loopback HTTP
+server on a random localhost port captures the redirect, validates state,
+and exchanges the code with the verifier.
 
-### 1. Whoop (`src/integrations/whoop.ts`)
+### Gmail + Google Calendar
 
-- Register a Whoop developer app at developer.whoop.com
-- OAuth 2.0 PKCE flow — open the auth URL in a child `BrowserWindow` from
-  `electron/main.ts`, capture the redirect, exchange code for tokens
-- Store tokens under `integrations.whoop` via `settings.set`
-- API base: `https://api.prod.whoop.com/developer/v1/`
-- Useful endpoints: `/recovery`, `/cycle`, `/sleep`
+1. [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
+   → create an **OAuth client ID** of type **Desktop app**.
+2. Enable [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com)
+   and [Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com).
+3. Atlas Hub → Settings → **Gmail & Google Calendar** → Configure → paste
+   Client ID + Secret → Save → Connect.
+4. Approve `gmail.readonly` + `calendar.readonly`. Inbox, Calendar, and
+   Morning Brief now read real data.
 
-### 2. Garmin Connect (`src/integrations/garmin.ts`)
+### Outlook (Microsoft 365 / Microsoft Graph)
 
-Two paths:
-- **Official Garmin Health API** — requires a Connect IQ partner agreement.
-  Cleanest but gated.
-- **Unofficial Connect web auth** — replicate what `python-garminconnect`
-  does (SSO POST, ticket exchange). Works for personal use; fragile.
+1. [Azure Portal → App Registrations](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
+   → New registration.
+2. Under **Authentication**, add a **Mobile and desktop applications**
+   redirect URI of `http://localhost`. Enable **"Allow public client flows"**.
+3. Under **API permissions**, add Microsoft Graph delegated scopes:
+   `User.Read`, `Mail.Read`, `Calendars.Read`, `offline_access`.
+4. Atlas Hub → Settings → **Outlook** → Configure → paste Application
+   (Client) ID. Leave Client Secret blank for a public PKCE client.
+   Tenant defaults to `common` (works for personal + work accounts).
+5. Click Save → Connect.
 
-### 3. Outlook (`src/integrations/outlook.ts`)
+### Whoop
 
-- Register an Azure AD app (multi-tenant, public client)
-- Redirect URI: `http://localhost:51820/auth/callback` (loopback)
-- Add an IPC handler in `electron/main.ts` that opens the system browser and
-  spins up a tiny HTTP listener for the redirect
-- Scopes: `offline_access Mail.Read Calendars.Read User.Read`
-- Use Microsoft Graph: `/me/messages`, `/me/calendarView`
+1. [Whoop Developer Dashboard](https://developer-dashboard.whoop.com/) →
+   create a new app.
+2. Required scopes: `offline`, `read:recovery`, `read:cycles`,
+   `read:sleep`, `read:profile`. The `offline` scope is mandatory for
+   refresh tokens.
+3. Register redirect URI(s). If the dashboard accepts a wildcard port
+   for desktop apps, use `http://localhost`. Otherwise pick a fixed port
+   (we'll match it).
+4. Atlas Hub → Settings → **Whoop** → Configure → paste Client ID +
+   Secret → Save → Connect.
+5. Approve, and the Morning Brief + Health page now use live recovery,
+   cycle (strain), and sleep records.
 
-### 4. Gmail + Google Calendar (`src/integrations/gmail.ts`) — ✅ wired
+### Garmin Connect — manual entry
 
-This one is done. Setup, end-to-end:
+Garmin doesn't expose a public OAuth flow. The official Garmin Health API
+requires a paid partner agreement, and the unofficial Connect web-login
+flow (used by `python-garminconnect` / `garth`) is fragile and arguably
+violates Garmin's TOS.
 
-1. **Create an OAuth client** in
-   [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials).
-   Type: **Desktop app**. Note the Client ID + Client Secret.
-2. **Enable the APIs** in the same project: Gmail API and Google Calendar API.
-3. Launch Atlas Hub → **Settings → Gmail & Google Calendar → Configure**.
-   Paste the Client ID and Client Secret, click Save, then Connect.
-4. A system browser tab opens; sign in and approve `gmail.readonly` +
-   `calendar.readonly`. The Electron main process runs a one-shot loopback
-   HTTP server (`http://127.0.0.1:<random>/oauth2callback`) to capture the
-   code, exchanges it for tokens using PKCE, and stores them encrypted on
-   this device.
-5. Inbox, Calendar, and Morning Brief now read real data.
-
-Implementation details:
-- OAuth runs entirely in the main process (`electron/oauth/google.ts`).
-  Tokens never reach the renderer.
-- Access tokens are auto-refreshed when they're within 60 seconds of expiry.
-- The renderer adapter (`src/integrations/gmail.ts`) calls IPC and normalizes
-  Gmail's `messages.list` + `messages.get` and Calendar's `events.list`
-  responses into the shared `InboxMessage` / `CalendarEvent` shape — so when
-  you later add Outlook, the UI doesn't change.
-- Falls back to mock data when not connected, so the UI is always populated.
+Instead, Atlas Hub treats Garmin as a **manual ingestion source**: open
+the Health page and log your morning Body Battery / HRV / resting HR /
+sleep from your watch. Those entries feed the Morning Brief identically
+to how the API would. To swap in a real API later, only the methods on
+`GarminAdapter` need to change.
 
 ### Adding an adapter
 
@@ -146,11 +152,26 @@ tsconfig.electron.json
 - External links are routed through `shell.openExternal` instead of opening
   inside the app window
 
-## Next steps (suggested order)
+## Persistence
 
-1. Wire **one** OAuth flow end-to-end (Gmail is the easiest to test)
-2. Add a background sync worker in `electron/main.ts` (every N minutes)
-3. Replace mock data in `Finance` / `CRM` with a SQLite store
-   (`better-sqlite3` — requires native rebuild)
-4. Add a Notes / Journal module
-5. Package with `electron-builder` for Mac/Windows
+`Finance`, `CRM`, `Projects`, and the Garmin manual log persist via
+`electron-store` (encrypted JSON, one file per table:
+`atlas-hub-finance.json`, etc.). Each table exposes a tiny CRUD API on
+`window.atlas.db.<table>`. Records survive app restarts.
+
+When the schema outgrows JSON, swap the four `db:*` IPC handlers in
+`electron/main.ts` for a SQLite-backed implementation (e.g. `sql.js` or
+`better-sqlite3`) — the renderer keeps its current interface.
+
+## Next steps
+
+1. **Background sync worker** — run hourly Gmail / Outlook / Whoop pulls
+   from the main process instead of on-demand.
+2. **Notes / Journal module** — currently the only obvious missing piece.
+3. **Leads & Social** — wire LinkedIn, X, or Buffer if you want real
+   channel data; otherwise add manual entry like Garmin.
+4. **AI-assisted brief** — replace the rule-based `recommend()` in
+   `src/lib/brief.ts` with an LLM call that takes recovery + calendar
+   density + unread priority and produces a recommendation.
+5. **Package for distribution** with `electron-builder` (Mac DMG /
+   Windows NSIS / Linux AppImage).

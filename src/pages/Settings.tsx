@@ -114,7 +114,7 @@ function IntegrationRow({ adapter }: { adapter: AdapterWithConfig }) {
   };
 
   const connected = status?.connected ?? false;
-  const configurable = !!adapter.configFields?.length;
+  const configurable = adapter.configFields !== undefined;
 
   return (
     <div className="rounded-lg border border-border bg-bg">
@@ -202,7 +202,7 @@ function ConfigForm({
 
   return (
     <form onSubmit={save} className="space-y-3 border-t border-border bg-bg-subtle p-3">
-      {adapter.id === "gmail" && <GmailSetupHelp />}
+      <SetupHelp id={adapter.id} />
       {fields.map((f) => (
         <div key={f.key}>
           <label className="block text-xs font-medium text-fg-muted">
@@ -229,7 +229,7 @@ function ConfigForm({
   );
 }
 
-function GmailSetupHelp() {
+function SetupHelp({ id }: { id: string }) {
   const link = (url: string, label: string) => (
     <button
       type="button"
@@ -240,30 +240,94 @@ function GmailSetupHelp() {
       <ExternalLink className="h-3 w-3" />
     </button>
   );
+
+  if (id === "gmail") {
+    return (
+      <HelpCard>
+        <ol className="list-decimal space-y-1 pl-4">
+          <li>
+            Open {link("https://console.cloud.google.com/apis/credentials", "Google Cloud Credentials")} and
+            create an <strong>OAuth client ID</strong> of type <em>Desktop app</em>.
+          </li>
+          <li>
+            Enable {link("https://console.cloud.google.com/apis/library/gmail.googleapis.com", "Gmail API")} and{" "}
+            {link("https://console.cloud.google.com/apis/library/calendar-json.googleapis.com", "Calendar API")}
+            {" "}in the same project.
+          </li>
+          <li>Paste Client ID + Secret, Save, then Connect.</li>
+        </ol>
+      </HelpCard>
+    );
+  }
+
+  if (id === "outlook") {
+    return (
+      <HelpCard>
+        <ol className="list-decimal space-y-1 pl-4">
+          <li>
+            Open {link("https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade", "Azure App Registrations")} and
+            create a new app.
+          </li>
+          <li>
+            Under <em>Authentication</em>, add a <strong>Mobile and desktop applications</strong> redirect URI of{" "}
+            <code>http://localhost</code>. Enable <em>"Allow public client flows"</em>.
+          </li>
+          <li>
+            Under <em>API permissions</em>, add Microsoft Graph delegated scopes:{" "}
+            <code>User.Read</code>, <code>Mail.Read</code>, <code>Calendars.Read</code>,{" "}
+            <code>offline_access</code>.
+          </li>
+          <li>
+            Copy the Application (Client) ID and paste it below. Leave Client Secret blank for a public PKCE
+            client. Tenant <code>common</code> works for both personal and work accounts.
+          </li>
+        </ol>
+      </HelpCard>
+    );
+  }
+
+  if (id === "whoop") {
+    return (
+      <HelpCard>
+        <ol className="list-decimal space-y-1 pl-4">
+          <li>
+            Open {link("https://developer-dashboard.whoop.com/", "Whoop Developer Dashboard")} and create
+            a new app.
+          </li>
+          <li>
+            Add scopes: <code>offline</code>, <code>read:recovery</code>, <code>read:cycles</code>,{" "}
+            <code>read:sleep</code>, <code>read:profile</code>. The <code>offline</code> scope is required for
+            refresh tokens.
+          </li>
+          <li>
+            Whoop requires registering an exact redirect URI. Add <code>http://localhost</code> if the
+            dashboard supports wildcard ports for desktop apps; otherwise pick a fixed port (e.g.
+            <code>http://localhost:51820/oauth2callback</code>) and we'll match it.
+          </li>
+          <li>Paste Client ID + Secret below, Save, then Connect.</li>
+        </ol>
+      </HelpCard>
+    );
+  }
+
+  if (id === "garmin") {
+    return (
+      <HelpCard>
+        Garmin doesn't expose a clean personal OAuth flow. Atlas Hub uses <strong>manual entry</strong>{" "}
+        instead: open the Health page and log your morning Body Battery / HRV / resting HR / sleep from
+        your watch. Those entries feed the Morning Brief just like the API would.
+      </HelpCard>
+    );
+  }
+
+  return null;
+}
+
+function HelpCard({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-md border border-border bg-bg p-3 text-xs leading-relaxed text-fg-muted">
       <div className="mb-1 font-medium text-fg">Setup</div>
-      <ol className="list-decimal space-y-1 pl-4">
-        <li>
-          Open the {link("https://console.cloud.google.com/apis/credentials", "Google Cloud Credentials page")} and
-          create an <strong>OAuth client ID</strong> of type <em>Desktop app</em>.
-        </li>
-        <li>
-          Enable the {link("https://console.cloud.google.com/apis/library/gmail.googleapis.com", "Gmail API")} and
-          {" "}
-          {link("https://console.cloud.google.com/apis/library/calendar-json.googleapis.com", "Google Calendar API")}
-          {" "}in the same project.
-        </li>
-        <li>Paste the Client ID and Client Secret below, hit Save, then click Connect.</li>
-        <li>
-          A browser tab opens — sign in, approve the <code>gmail.readonly</code> and{" "}
-          <code>calendar.readonly</code> scopes, and you're done.
-        </li>
-      </ol>
-      <p className="mt-2">
-        The redirect is a local loopback (<code>http://127.0.0.1:&lt;random-port&gt;/oauth2callback</code>) handled by
-        the Electron main process. Tokens are stored encrypted on this device only.
-      </p>
+      {children}
     </div>
   );
 }
