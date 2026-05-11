@@ -7,12 +7,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:electron": "concurrently -k \"npm:dev\" \"wait-on tcp:5173 && cross-env NODE_ENV=development electron .\"",
-    "build:renderer": "tsc -b && vite build",
+    "dev:electron": "npm run build:electron && concurrently -k \"npm:dev\" \"npm:watch:electron\" \"wait-on tcp:5173 dist-electron/main.js && cross-env NODE_ENV=development electron .\"",
+    "watch:electron": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
+    "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "build": "npm run build:renderer && npm run build:electron",
     "start": "npm run build && electron .",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -15,6 +15,23 @@ const api = {
   shell: {
     openExternal: (url: string) => ipcRenderer.invoke("shell:openExternal", url),
   },
+  google: {
+    connect: (clientId: string, clientSecret?: string) =>
+      ipcRenderer.invoke("google:connect", { clientId, clientSecret }) as Promise<{
+        connected: boolean;
+      }>,
+    disconnect: () => ipcRenderer.invoke("google:disconnect") as Promise<boolean>,
+    status: () =>
+      ipcRenderer.invoke("google:status") as Promise<{
+        connected: boolean;
+        expiresAt?: number;
+        scope?: string;
+      }>,
+    listMessages: (limit?: number) =>
+      ipcRenderer.invoke("gmail:listMessages", { limit }) as Promise<unknown[]>,
+    listEvents: (rangeDays?: number) =>
+      ipcRenderer.invoke("gcal:listEvents", { rangeDays }) as Promise<unknown[]>,
+  },
   platform: process.platform,
 };
 

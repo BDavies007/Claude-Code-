@@ -1,7 +1,7 @@
 export interface RecoveryReading {
   source: "whoop" | "garmin";
   date: string;
-  score: number; // 0-100
+  score: number;
   restingHr?: number;
   hrv?: number;
   sleepHours?: number;
@@ -35,9 +35,19 @@ export interface IntegrationStatus {
   error?: string;
 }
 
+export interface ConfigField {
+  key: string;
+  label: string;
+  type: "text" | "password";
+  placeholder?: string;
+  help?: string;
+  required?: boolean;
+}
+
 export interface IntegrationAdapter {
   readonly id: "whoop" | "garmin" | "outlook" | "gmail";
   readonly label: string;
+  readonly configFields?: ConfigField[];
   status(): Promise<IntegrationStatus>;
   connect(): Promise<void>;
   disconnect(): Promise<void>;

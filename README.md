@@ -48,7 +48,8 @@ third-party accounts.
 | CRM           | Mock     | Accounts table                                                          |
 | Leads/Social  | Mock     | Channel performance                                                     |
 | Projects      | Mock     | Status board                                                            |
-| Settings      | Working  | Theme, PIN reset, integration connect/disconnect buttons (stubbed OAuth)|
+| Settings      | Working  | Theme, PIN reset, configurable integrations                             |
+| Gmail OAuth   | **Working** | PKCE + loopback flow in main process, auto-refresh, live API calls   |
 
 ## Integration roadmap
 
@@ -82,12 +83,32 @@ Two paths:
 - Scopes: `offline_access Mail.Read Calendars.Read User.Read`
 - Use Microsoft Graph: `/me/messages`, `/me/calendarView`
 
-### 4. Gmail + Google Calendar (`src/integrations/gmail.ts`)
+### 4. Gmail + Google Calendar (`src/integrations/gmail.ts`) — ✅ wired
 
-- Create a **Desktop app** OAuth client in Google Cloud Console
-- Loopback redirect (`http://127.0.0.1:<port>/oauth2callback`)
-- Scopes: `gmail.readonly`, `calendar.readonly`
-- APIs: `gmail.users.messages.list/get`, `calendar.events.list`
+This one is done. Setup, end-to-end:
+
+1. **Create an OAuth client** in
+   [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials).
+   Type: **Desktop app**. Note the Client ID + Client Secret.
+2. **Enable the APIs** in the same project: Gmail API and Google Calendar API.
+3. Launch Atlas Hub → **Settings → Gmail & Google Calendar → Configure**.
+   Paste the Client ID and Client Secret, click Save, then Connect.
+4. A system browser tab opens; sign in and approve `gmail.readonly` +
+   `calendar.readonly`. The Electron main process runs a one-shot loopback
+   HTTP server (`http://127.0.0.1:<random>/oauth2callback`) to capture the
+   code, exchanges it for tokens using PKCE, and stores them encrypted on
+   this device.
+5. Inbox, Calendar, and Morning Brief now read real data.
+
+Implementation details:
+- OAuth runs entirely in the main process (`electron/oauth/google.ts`).
+  Tokens never reach the renderer.
+- Access tokens are auto-refreshed when they're within 60 seconds of expiry.
+- The renderer adapter (`src/integrations/gmail.ts`) calls IPC and normalizes
+  Gmail's `messages.list` + `messages.get` and Calendar's `events.list`
+  responses into the shared `InboxMessage` / `CalendarEvent` shape — so when
+  you later add Outlook, the UI doesn't change.
+- Falls back to mock data when not connected, so the UI is always populated.
 
 ### Adding an adapter
 
