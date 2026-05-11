@@ -121,6 +121,40 @@ export interface CrudApi<T> {
   replaceAll: (items: T[]) => Promise<T[]>;
 }
 
+export interface BriefInput {
+  date: string;
+  recovery?: {
+    source: "whoop" | "garmin";
+    score: number;
+    hrv?: number;
+    sleepHours?: number;
+    restingHr?: number;
+    strain?: number;
+  } | null;
+  events: { time: string; title: string; source: string }[];
+  priorityMessages: { from: string; subject: string; source: string }[];
+  unreadCount: number;
+  finance?: {
+    incomeMonth: number;
+    expenseMonth: number;
+    netCash: number;
+  };
+  pipeline?: { stage: string; count: number; value: number }[];
+  projects?: { name: string; status: string; due: string }[];
+}
+
+export type BriefEventKind = "text" | "thinking" | "done" | "error";
+
+export interface BriefDonePayload {
+  text: string;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens?: number | null;
+    cache_creation_input_tokens?: number | null;
+  };
+}
+
 export interface AtlasApi {
   settings: {
     get: <T = unknown>(key: string) => Promise<T>;
@@ -169,6 +203,16 @@ export interface AtlasApi {
     finance: CrudApi<Transaction>;
     crm: CrudApi<CrmClient>;
     projects: CrudApi<ProjectRow>;
+  };
+  ai: {
+    status: () => Promise<{ configured: boolean }>;
+    setKey: (apiKey: string) => Promise<boolean>;
+    clearKey: () => Promise<boolean>;
+    generateBrief: (streamId: string, input: BriefInput) => Promise<boolean>;
+    cancelBrief: (streamId: string) => Promise<boolean>;
+    onBriefEvent: (
+      handler: (kind: BriefEventKind, streamId: string, payload: unknown) => void,
+    ) => () => void;
   };
   platform: NodeJS.Platform;
 }

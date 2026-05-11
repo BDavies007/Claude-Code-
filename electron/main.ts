@@ -6,6 +6,7 @@ import { startGoogleOAuth, refreshGoogleToken } from "./oauth/google.js";
 import { startMicrosoftOAuth, refreshMicrosoftToken } from "./oauth/microsoft.js";
 import { startWhoopOAuth, refreshWhoopToken } from "./oauth/whoop.js";
 import { PkceTokens } from "./oauth/pkce.js";
+import { AnthropicService, BriefInput } from "./ai/anthropic.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV === "development";
@@ -39,6 +40,7 @@ type AppSettings = {
     outlook?: OAuthIntegration;
     gmail?: OAuthIntegration;
   };
+  anthropic?: { apiKey?: string };
 };
 
 const store = new Store<AppSettings>({
@@ -46,6 +48,9 @@ const store = new Store<AppSettings>({
   defaults: { theme: "system", integrations: {} },
   encryptionKey: "atlas-hub-local-v1",
 });
+
+const anthropic = new AnthropicService();
+anthropic.setApiKey(store.get("anthropic")?.apiKey);
 
 const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -285,6 +290,44 @@ function registerIpc() {
     const next = (integrations.garmin?.entries ?? []).filter((e) => e.date !== date);
     store.set("integrations", { ...integrations, garmin: { entries: next } });
     return next;
+  });
+
+  // ---------- AI ----------
+  ipcMain.handle("ai:status", () => ({ configured: anthropic.isConfigured() }));
+
+  ipcMain.handle("ai:setKey", (_e, apiKey: string) => {
+    store.set("anthropic", { apiKey });
+    anthropic.setApiKey(apiKey);
+    return true;
+  });
+
+  ipcMain.handle("ai:clearKey", () => {
+    store.delete("anthropic");
+    anthropic.setApiKey(undefined);
+    return true;
+  });
+
+  ipcMain.handle(
+    "ai:generateBrief",
+    async (e, args: { streamId: string; input: BriefInput }) => {
+      const wc = e.sender;
+      const { streamId, input } = args;
+      const send = (channel: string, payload: unknown) => {
+        if (!wc.isDestroyed()) wc.send(channel, { streamId, payload });
+      };
+      await anthropic.generateBrief(streamId, input, {
+        onText: (delta) => send("ai:brief:text", delta),
+        onThinking: (delta) => send("ai:brief:thinking", delta),
+        onDone: (final) => send("ai:brief:done", final),
+        onError: (msg) => send("ai:brief:error", msg),
+      });
+      return true;
+    },
+  );
+
+  ipcMain.handle("ai:cancelBrief", (_e, streamId: string) => {
+    anthropic.cancel(streamId);
+    return true;
   });
 
   // ---------- persistence: finance, crm, projects ----------

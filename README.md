@@ -39,8 +39,8 @@ third-party accounts.
 
 | Module        | State    | Notes                                                                   |
 | ------------- | -------- | ----------------------------------------------------------------------- |
-| Morning Brief | Working  | Synthesizes recovery + calendar + inbox into a daily recommendation     |
-| Dashboard     | Mock     | KPI tiles + pipeline placeholder                                        |
+| Morning Brief | **AI-powered** | Streams from Claude Opus 4.7 (adaptive reasoning) given recovery + calendar + inbox + finance + pipeline + projects. Falls back to rule-based if no API key. |
+| Dashboard     | **Working** | Live KPIs from persisted Finance/CRM/Projects: income MTD + MoM, cash on hand, pipeline by stage, projects by status, 6-month cashflow bars |
 | Health        | **Working** | Whoop live, Garmin via manual entry form, persistent                 |
 | Inbox         | **Working** | Unified Outlook (Graph) + Gmail, priority-ranked                     |
 | Calendar      | **Working** | Outlook + Google Calendar, 7-day merged view                         |
@@ -151,6 +151,26 @@ tsconfig.electron.json
   production)
 - External links are routed through `shell.openExternal` instead of opening
   inside the app window
+
+## AI Morning Brief
+
+Atlas Hub generates its daily brief by streaming from **Claude Opus 4.7** with
+adaptive reasoning. The model receives a synthesized snapshot of the day's
+signals — recovery score, today's events, high-priority unread messages,
+month-to-date finance, pipeline by stage, and any at-risk projects — and
+returns a 2–4 sentence brief that ends with a single concrete action.
+
+**Setup:** Settings → AI → paste an API key from
+[console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys).
+
+**Where the key lives:** encrypted via `electron-store` in the main process.
+The renderer never sees it. All Anthropic SDK calls happen in
+`electron/ai/anthropic.ts`. The renderer triggers a brief over IPC; the main
+process streams text + thinking events back via `webContents.send`.
+
+**Fallback:** if no API key is set or the API call fails, the brief falls
+back to a deterministic rule-based recommendation in
+`src/lib/brief.ts:ruleBasedRecommendation()`.
 
 ## Persistence
 

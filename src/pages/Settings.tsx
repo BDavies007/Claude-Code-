@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Sparkles } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { allAdapters } from "@/integrations";
@@ -25,6 +25,16 @@ export function SettingsPage() {
           {allAdapters.map((a) => (
             <IntegrationRow key={a.id} adapter={a} />
           ))}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>AI</CardTitle>
+          <span className="text-xs text-fg-muted">Powers the Morning Brief</span>
+        </CardHeader>
+        <CardBody>
+          <AnthropicKeyForm />
         </CardBody>
       </Card>
 
@@ -328,6 +338,92 @@ function HelpCard({ children }: { children: React.ReactNode }) {
     <div className="rounded-md border border-border bg-bg p-3 text-xs leading-relaxed text-fg-muted">
       <div className="mb-1 font-medium text-fg">Setup</div>
       {children}
+    </div>
+  );
+}
+
+function AnthropicKeyForm() {
+  const [configured, setConfigured] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    window.atlas.ai.status().then((s) => setConfigured(s.configured));
+  }, []);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!apiKey.trim()) return;
+    setBusy(true);
+    await window.atlas.ai.setKey(apiKey.trim());
+    setConfigured(true);
+    setApiKey("");
+    setBusy(false);
+    setSavedAt(Date.now());
+  };
+
+  const clear = async () => {
+    if (!confirm("Remove your Anthropic API key? The Morning Brief will fall back to rule-based reasoning.")) return;
+    await window.atlas.ai.clearKey();
+    setConfigured(false);
+    setSavedAt(null);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="grid h-8 w-8 place-items-center rounded-md bg-brand text-brand-fg">
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <div className="flex-1">
+          <div className="text-sm font-medium">Anthropic API key</div>
+          <div className="text-xs text-fg-muted">
+            Generates the Morning Brief using Claude Opus 4.7 with adaptive reasoning.
+          </div>
+        </div>
+        <span
+          className={
+            "rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide " +
+            (configured ? "bg-success/15 text-success" : "bg-bg-subtle text-fg-muted")
+          }
+        >
+          {configured ? "Configured" : "Not configured"}
+        </span>
+      </div>
+
+      <HelpCard>
+        Get a key at{" "}
+        <button
+          type="button"
+          onClick={() => window.atlas.shell.openExternal("https://console.anthropic.com/settings/keys")}
+          className="inline-flex items-center gap-0.5 text-brand hover:underline"
+        >
+          console.anthropic.com/settings/keys
+          <ExternalLink className="h-3 w-3" />
+        </button>
+        . The key is encrypted at rest and never exposed to the renderer — Claude calls run in the
+        Electron main process.
+      </HelpCard>
+
+      <form onSubmit={save} className="flex gap-2">
+        <input
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder={configured ? "Paste a new key to rotate…" : "sk-ant-…"}
+          className="flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 text-sm outline-none focus:border-brand"
+        />
+        <Button type="submit" size="sm" disabled={busy || !apiKey.trim()}>
+          {busy ? "Saving…" : "Save"}
+        </Button>
+        {configured && (
+          <Button type="button" variant="secondary" size="sm" onClick={clear}>
+            Remove
+          </Button>
+        )}
+      </form>
+      {savedAt && <div className="text-xs text-success">Saved.</div>}
     </div>
   );
 }

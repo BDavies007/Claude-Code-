@@ -16,6 +16,7 @@
     "lint": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.1",
     "clsx": "^2.1.1",
     "electron-store": "^10.0.0",
     "lucide-react": "^0.460.0",
