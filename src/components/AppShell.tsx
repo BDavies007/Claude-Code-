@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -54,7 +55,7 @@ export function AppShell() {
     <div className="flex min-h-screen flex-col lg:flex-row">
       {/* Sidebar */}
       <aside className="border-b border-border bg-card/40 lg:w-64 lg:shrink-0 lg:border-b-0 lg:border-r">
-        <div className="flex items-center gap-2 p-4">
+        <Link href="/" className="flex items-center gap-2 p-4 transition-opacity hover:opacity-80">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15">
             <Sun className="h-5 w-5 text-primary" />
           </div>
@@ -62,7 +63,7 @@ export function AppShell() {
             <p className="text-sm font-bold leading-tight">Lightsummit</p>
             <p className="text-[10px] text-muted-foreground">Opportunity Engine</p>
           </div>
-        </div>
+        </Link>
         <nav className="flex gap-1 overflow-x-auto p-2 lg:flex-col lg:overflow-visible">
           {NAV.map((item) => {
             const Icon = item.icon;

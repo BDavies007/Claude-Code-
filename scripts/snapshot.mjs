@@ -293,5 +293,162 @@ td{padding:8px;border-bottom:1px solid #16203285}
 </div></body></html>`;
 
 writeFileSync(new URL("../preview.html", import.meta.url), html);
-console.log("Wrote preview.html");
+
+// ---------------------------------------------------------------------------
+// Landing preview (mirrors src/components/landing) — high-end front visual
+// ---------------------------------------------------------------------------
+const modules = [
+  ["▦", "Executive Dashboard", "Score, NPV, IRR, payback, carbon and action at a glance."],
+  ["▤", "Site Intake", "Five-section intake: client, site, commercial, tech, ESG."],
+  ["◎", "Scoring Engine", "Weighted 0–100 score across seven categories."],
+  ["∑", "Financial Model", "NPV, IRR, DSCR, risk-adjusted returns, 25-yr cash flows."],
+  ["⇄", "Scenario Engine", "Base, conservative, downside, upside, aggressive."],
+  ["▥", "Opportunity Pipeline", "Nine-stage pipeline from lead to operational."],
+  ["◰", "European Market Map", "Nine markets ranked with entry strategy."],
+  ["⚠", "Risk Matrix", "Likelihood × impact heat-map with mitigations."],
+];
+const streams = [
+  ["⚡", "PPAs", "10–25 yr fixed price + inflation, zero-capex offers."],
+  ["▮", "Storage & flexibility", "BESS arbitrage, DSR, capacity, balancing."],
+  ["♻", "Carbon value", "Verified abatement monetised via digital MRV."],
+  ["⌁", "EV & optimisation", "EV charging, BEMS/HEMS, behind-the-meter."],
+  ["◷", "Developer margin", "Recurring 1p/kWh on every delivered unit."],
+  ["▤", "ESG / MRV", "ISSB/CSRD reporting and Scope 1/2/3 disclosure."],
+];
+const markets = [["United Kingdom", 88], ["Germany", 84], ["Netherlands", 82], ["Spain", 80], ["Ireland", 78], ["Italy", 76], ["Nordics", 74], ["Poland", 72], ["France", 70]];
+const journey = [["01", "Developer", "Originate and structure zero-capex PPA opportunities."], ["02", "Co-investor", "Take equity alongside strategic finance partners."], ["03", "Platform", "Aggregate sites, data and MRV into a scalable platform."], ["04", "Asset owner", "Own hybrid solar-battery portfolios with diversified income."]];
+const ticker = ["ETS expansion", "ISSB / CSRD", "Grid constraints", "Flexible demand", "Zero-capex offers", "Digital MRV", "Risk-adjusted NPV", "Portfolio aggregation", "Scope 3 pressure", "PPA structuring", "BESS arbitrage", "Carbon value"];
+
+const landing = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lightsummit Opportunity Engine — Front Visual</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0a0f1c;color:#e2e8f0;line-height:1.45;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+.bg{position:fixed;inset:0;z-index:-1;overflow:hidden}
+.blob{position:absolute;border-radius:9999px;filter:blur(80px);opacity:.5;animation:drift 18s ease-in-out infinite}
+@keyframes drift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(6%,-4%) scale(1.1)}66%{transform:translate(-5%,5%) scale(.95)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+@keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@keyframes fade{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(100,116,139,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(100,116,139,.16) 1px,transparent 1px);background-size:46px 46px;-webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 0,#000 40%,transparent 100%);mask-image:radial-gradient(ellipse 80% 60% at 50% 0,#000 40%,transparent 100%)}
+.glass{background:rgba(14,22,40,.6);backdrop-filter:blur(14px);border:1px solid rgba(51,65,85,.7)}
+.wrap{max-width:1100px;margin:0 auto;padding:0 24px}
+.nav{position:sticky;top:12px;z-index:50}
+.navin{display:flex;align-items:center;justify-content:space-between;border-radius:999px;padding:10px 18px;margin-top:12px}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:32px;height:32px;border-radius:9px;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center}
+.navlinks{display:flex;gap:24px;color:#94a3b8;font-size:14px}
+.btn{display:inline-flex;align-items:center;gap:6px;background:#22c55e;color:#0a0f1c;font-weight:600;border-radius:999px;padding:9px 18px;font-size:14px}
+.btn.lg{padding:14px 30px;font-size:15px}
+.btn.ghost{background:transparent;color:#e2e8f0;border:1px solid #334155}
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;padding:70px 0}
+@media(max-width:880px){.hero{grid-template-columns:1fr}.navlinks{display:none}}
+.pill{display:inline-flex;align-items:center;gap:8px;border:1px solid #334155;background:rgba(30,41,59,.4);border-radius:999px;padding:5px 12px;font-size:12px;color:#94a3b8;margin-bottom:20px}
+h1{font-size:clamp(34px,5vw,60px);line-height:1.05;font-weight:700;letter-spacing:-.02em}
+.grad{background:linear-gradient(100deg,#22c55e,#0ea5e9 45%,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{margin-top:20px;max-width:560px;color:#94a3b8;font-size:18px}
+.ctarow{margin-top:32px;display:flex;gap:12px;flex-wrap:wrap}
+.stats{margin-top:40px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.stats .v{font-size:24px;font-weight:700}.stats .l{font-size:12px;color:#64748b}
+.fade{animation:fade .7s ease-out both}
+.mock{animation:float 6s ease-in-out infinite;border-radius:18px;padding:16px;box-shadow:0 30px 60px -20px rgba(0,0,0,.6)}
+.dots{display:flex;gap:6px;align-items:center;margin-bottom:12px}
+.dot{width:10px;height:10px;border-radius:50%}
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.mcard{border:1px solid #1e293b;background:rgba(14,22,40,.6);border-radius:12px;padding:12px}
+.mcap{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+.chart{display:flex;align-items:flex-end;gap:5px;height:90px;margin-top:8px}
+.chart>span{flex:1;border-radius:4px 4px 0 0;background:linear-gradient(180deg,#22c55e,#0ea5e9 60%,transparent);opacity:.85}
+.tick{border-top:1px solid rgba(51,65,85,.6);border-bottom:1px solid rgba(51,65,85,.6);background:rgba(10,15,28,.4);padding:12px 0;overflow:hidden}
+.tickrow{display:flex;gap:32px;white-space:nowrap;color:#94a3b8;font-size:14px;animation:marquee 28s linear infinite;width:max-content}
+.tickrow span{display:inline-flex;align-items:center;gap:8px}
+.ey{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.2em;color:#22c55e;margin-bottom:12px}
+section{padding:80px 0}
+.sh{max-width:620px;margin:0 auto;text-align:center}
+.sh h2{font-size:clamp(26px,3.5vw,38px);font-weight:700;letter-spacing:-.02em}
+.sh p{margin-top:16px;color:#94a3b8}
+.cards{margin-top:48px;display:grid;gap:16px}
+.c4{grid-template-columns:repeat(4,1fr)}.c3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:880px){.c4,.c3{grid-template-columns:repeat(2,1fr)}.stats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.c4,.c3{grid-template-columns:1fr}}
+.tile{border:1px solid #1e293b;background:rgba(14,22,40,.5);border-radius:16px;padding:20px;transition:transform .25s,border-color .25s}
+.tile:hover{transform:translateY(-4px);border-color:rgba(34,197,94,.5)}
+.ic{width:42px;height:42px;border-radius:12px;background:rgba(34,197,94,.1);display:flex;align-items:center;justify-content:center;color:#22c55e;font-size:18px;margin-bottom:12px}
+.ic.acc{background:rgba(14,165,233,.1);color:#0ea5e9}
+.tile h3{font-size:14px;font-weight:600}.tile p{margin-top:6px;font-size:12px;color:#94a3b8}
+.flow{display:flex;gap:14px}
+.band{border-top:1px solid rgba(51,65,85,.6);border-bottom:1px solid rgba(51,65,85,.6);background:rgba(10,15,28,.3)}
+.mrow{display:flex;align-items:center;justify-content:space-between;border:1px solid #1e293b;background:rgba(14,22,40,.5);border-radius:12px;padding:14px 18px;transition:transform .25s,border-color .25s}
+.mrow:hover{transform:translateY(-3px);border-color:rgba(34,197,94,.5)}
+.mbar{width:64px;height:6px;border-radius:999px;background:#1e293b;overflow:hidden}
+.mbar>div{height:100%;background:linear-gradient(90deg,#22c55e,#0ea5e9)}
+.cta{position:relative;overflow:hidden;border-radius:24px;padding:64px 24px;text-align:center}
+.foot{border-top:1px solid rgba(51,65,85,.6);padding:28px 0;font-size:12px;color:#64748b}
+.footin{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.banner{position:fixed;top:0;left:0;right:0;z-index:60;background:#0e1628;border-bottom:1px solid #1e293b;padding:8px 16px;font-size:12px;color:#94a3b8;text-align:center}
+.shift{padding-top:40px}
+</style></head><body>
+<div class="banner">📸 Static preview of the high-end front visual (animated in-browser). Live React version at route <b>/</b> · the engine at <b>/app</b>.</div>
+<div class="bg"><div class="blob" style="left:-10%;top:2%;width:480px;height:480px;background:#22c55e44"></div><div class="blob" style="right:-8%;top:8%;width:420px;height:420px;background:#0ea5e944;animation-delay:-6s"></div><div class="blob" style="left:30%;top:42%;width:460px;height:460px;background:#8b5cf633;animation-delay:-12s"></div><div class="grid-overlay"></div></div>
+
+<div class="shift"></div>
+<header class="nav"><div class="wrap"><div class="navin glass">
+  <div class="brand"><div class="logo">☀️</div><div><div style="font-weight:700;font-size:14px">Lightsummit</div><div style="font-size:9px;color:#64748b">Opportunity Engine</div></div></div>
+  <nav class="navlinks"><a href="#platform">Platform</a><a href="#revenue">Revenue</a><a href="#markets">Markets</a><a href="#journey">Strategy</a></nav>
+  <a class="btn">Launch Engine →</a>
+</div></div></header>
+
+<div class="wrap"><section class="hero">
+  <div class="fade">
+    <div class="pill">✦ Decentralised energy · carbon · MRV · flexibility</div>
+    <h1>Assess every <span class="grad">energy opportunity</span> with institutional rigour.</h1>
+    <p class="lead">The Lightsummit Opportunity Assessing Engine evaluates European commercial, industrial and data-centre sites for solar, storage, flexibility, PPAs and carbon value — scoring, modelling and ranking each one in seconds.</p>
+    <div class="ctarow"><a class="btn lg">Launch the engine →</a><a class="btn lg ghost">Explore the platform</a></div>
+    <div class="stats">
+      <div><div class="v">12–25%+</div><div class="l">Target portfolio IRR</div></div>
+      <div><div class="v">10–25 yr</div><div class="l">Contracted PPA revenue</div></div>
+      <div><div class="v">9</div><div class="l">European markets</div></div>
+      <div><div class="v">8</div><div class="l">Integrated modules</div></div>
+    </div>
+  </div>
+  <div class="fade" style="animation-delay:.15s">
+    <div class="mock glass">
+      <div class="dots"><span class="dot" style="background:#ef444499"></span><span class="dot" style="background:#f59e0b99"></span><span class="dot" style="background:#22c55e99"></span><span style="margin-left:10px;font-size:10px;color:#64748b">Executive Dashboard · ${input.client.companyName}</span></div>
+      <div class="mgrid">
+        <div class="mcard"><div class="mcap">Opportunity score</div><div style="display:flex;align-items:end;gap:8px;margin-top:4px"><span style="font-size:30px;font-weight:700;color:#22c55e">${sc.overall.toFixed(0)}</span><span style="margin-bottom:5px;background:rgba(14,165,233,.15);color:#0ea5e9;border-radius:999px;padding:2px 8px;font-size:9px;font-weight:600">${sc.action}</span></div><div class="mbar" style="width:100%;margin-top:8px"><div style="width:${sc.overall}%"></div></div></div>
+        <div class="mcard"><div class="mcap">Project IRR</div><div style="font-size:30px;font-weight:700;color:#0ea5e9;margin-top:4px">${pct(fin.irr)}</div><div style="font-size:9px;color:#64748b">Payback ${fin.payback.toFixed(1)} yrs</div></div>
+        <div class="mcard"><div class="mcap">Risk-adj NPV</div><div style="font-size:30px;font-weight:700;color:#22c55e;margin-top:4px">${gbp(fin.raNpv)}</div><div style="font-size:9px;color:#64748b">25-yr rev ${gbp(fin.revenue25)}</div></div>
+      </div>
+      <div class="mcard" style="margin-top:10px"><div class="mcap">Revenue stack over PPA term</div><div class="chart">${[42, 58, 51, 70, 64, 82, 76, 90, 85, 96].map((h) => `<span style="height:${h}%"></span>`).join("")}</div></div>
+    </div>
+  </div>
+</section></div>
+
+<div class="tick"><div class="tickrow">${[...ticker, ...ticker].map((t) => `<span>• ${t}</span>`).join("")}</div></div>
+
+<section id="platform"><div class="wrap"><div class="sh"><div class="ey">The platform</div><h2>Eight modules, one decision engine</h2><p>From raw site intake to investment-committee-ready output — every stage of opportunity assessment in a single, integrated workflow.</p></div>
+  <div class="cards c4">${modules.map((m) => `<div class="tile"><div class="ic">${m[0]}</div><h3>${m[1]}</h3><p>${m[2]}</p></div>`).join("")}</div></div></section>
+
+<div class="band"><section id="revenue"><div class="wrap"><div class="sh"><div class="ey">Diversified income</div><h2>Six revenue streams, stacked</h2><p>Predictable contracted revenue plus optionality — the engine models each stream and the recurring developer margin across the full asset life.</p></div>
+  <div class="cards c3">${streams.map((s) => `<div class="tile" style="display:flex;gap:14px"><div class="ic acc">${s[0]}</div><div><h3>${s[1]}</h3><p>${s[2]}</p></div></div>`).join("")}</div></div></section></div>
+
+<section id="markets"><div class="wrap"><div class="sh"><div class="ey">European coverage</div><h2>Nine markets, ranked and ready</h2><p>Attractiveness scoring across grid constraint, PPA maturity, carbon pressure, BESS opportunity and regulatory complexity.</p></div>
+  <div class="cards c3">${markets.map((m, i) => `<div class="mrow"><div style="display:flex;align-items:center;gap:12px"><span style="font-size:12px;color:#64748b;font-family:monospace">${String(i + 1).padStart(2, "0")}</span><span style="font-size:14px;font-weight:500">${m[0]}</span></div><div style="display:flex;align-items:center;gap:8px"><div class="mbar"><div style="width:${m[1]}%"></div></div><span style="font-weight:700;color:#22c55e;width:26px;text-align:right">${m[1]}</span></div></div>`).join("")}</div></div></section>
+
+<div class="band"><section id="journey"><div class="wrap"><div class="sh"><div class="ey">The strategy</div><h2>From developer to asset owner</h2><p>An asset-light path that compounds: originate, co-invest, build the platform, then own diversified hybrid portfolios.</p></div>
+  <div class="cards c4">${journey.map((j, i) => `<div class="tile"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span style="font-size:24px;font-weight:700" class="grad">${j[0]}</span>${i < 3 ? '<span style="color:#64748b">→</span>' : ""}</div><h3>${j[1]}</h3><p>${j[2]}</p></div>`).join("")}</div></div></section></div>
+
+<section><div class="wrap"><div class="cta glass"><div class="blob" style="left:50%;top:-40px;width:300px;height:300px;background:#22c55e33;transform:translateX(-50%)"></div>
+  <h2 style="position:relative;font-size:clamp(28px,4vw,40px);font-weight:700">Turn sites into a <span class="grad">contracted portfolio</span>.</h2>
+  <p style="position:relative;max-width:540px;margin:16px auto 0;color:#94a3b8">Score, model and prioritise your next decentralised energy opportunity in seconds. Everything runs locally on sample data — no sign-up required.</p>
+  <div style="position:relative;margin-top:28px"><a class="btn lg">Launch the engine →</a></div>
+</div></div></section>
+
+<footer class="foot"><div class="wrap footin"><div>☀️ Lightsummit Opportunity Assessing Engine</div><div>Figures illustrative · not financial advice · built for assessment.</div></div></footer>
+</body></html>`;
+
+writeFileSync(new URL("../landing-preview.html", import.meta.url), landing);
+
+console.log("Wrote preview.html + landing-preview.html");
 console.log("Score:", sc.overall.toFixed(1), "| IRR:", pct(fin.irr), "| RA-NPV:", gbp(fin.raNpv), "| Payback:", fin.payback.toFixed(1) + "y", "| Action:", sc.action);
