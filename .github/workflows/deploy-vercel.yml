@@ -1,0 +1,55 @@
+# Optional: token-based production deploy to Vercel.
+#
+# This is an ALTERNATIVE to Vercel's native Git integration (the recommended
+# path — see README "Deploy"). It runs only when triggered manually, so it
+# never fails a push if the required secrets are not configured.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   VERCEL_TOKEN      — a Vercel access token (vercel.com/account/tokens)
+#   VERCEL_ORG_ID     — from `.vercel/project.json` after `vercel link`
+#   VERCEL_PROJECT_ID — from `.vercel/project.json` after `vercel link`
+
+name: Deploy to Vercel
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment target"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - preview
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=${{ inputs.environment }} --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: vercel build ${{ inputs.environment == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy
+        run: |
+          URL=$(vercel deploy --prebuilt ${{ inputs.environment == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
+          echo "Deployed to: $URL"
+          echo "### ✅ Deployed to $URL" >> "$GITHUB_STEP_SUMMARY"

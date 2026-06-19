@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Lightsummit Opportunity Assessing Engine — intelligent assessment platform for European decentralised energy projects",
+  "engines": {
+    "node": ">=18.18.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

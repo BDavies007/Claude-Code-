@@ -30,6 +30,36 @@ npm run typecheck  # strict TS check
 npm run build      # production build
 ```
 
+## Deploy (Vercel)
+
+The app is a standard Next.js 14 project with **no required environment
+variables** (it runs on local mock data), so it deploys to Vercel as-is.
+
+### Recommended: native Git integration (auto-deploys on every push)
+
+1. Go to **https://vercel.com/new** and **Import** the GitHub repo
+   `BDavies007/Claude-Code-` (authorise Vercel for the repo if prompted).
+2. Vercel auto-detects Next.js — leave the build settings at their defaults
+   (`next build`). No env vars are needed. Click **Deploy**.
+3. **Set the production branch:** Project → **Settings → Git → Production
+   Branch** → `claude/lightsummit-opportunity-engine-fhykeu` (the app currently
+   lives on this branch; `main` only has the README). Alternatively, merge the
+   branch into `main` first and deploy from `main`.
+
+After that, every push to the configured branch redeploys automatically, and
+every other branch/PR gets its own preview URL. Your public URL will look like
+`https://<project-name>.vercel.app`.
+
+> The landing page is at `/`; the interactive engine is at `/app`.
+
+### Alternative: token-based CI deploy
+
+A manual GitHub Actions workflow is included at
+`.github/workflows/deploy-vercel.yml`. Add the `VERCEL_TOKEN`,
+`VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` repository secrets, then run it from the
+**Actions** tab (it only runs on manual dispatch, so it never fails a normal
+push). Delete the workflow if you use the native Git integration above.
+
 ## Product modules
 
 1. **Executive Dashboard** — total opportunity score, financial attractiveness,
