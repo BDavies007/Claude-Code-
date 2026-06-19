@@ -177,14 +177,16 @@ def zones(ftp):
 # ----------------------------------------------------------------------------
 # Daily template (Mon..Sun) -> structured content
 # ----------------------------------------------------------------------------
-# index 0 = Monday
+# index 0 = Monday. Each day carries a primary compound + accessory list so the
+# Daily Plan can render wave-specific set/rep schemes that progress every week.
 DAY_TEMPLATE = [
     {  # Monday
         "name": "Monday",
         "focus": "Chest + Biceps",
-        "workout": "Barbell bench, incline DB press, weighted dips, cable fly; EZ-bar curl, incline DB curl, cable curl. 4-5 exercises, 3-4 sets.",
-        "endurance": "Zone 2 Cycle",
-        "intensity": "Easy",
+        "compound": "Barbell bench press",
+        "accessories": ["Incline DB press", "Weighted dip", "Cable fly",
+                        "EZ-bar curl", "Incline DB curl", "Cable curl"],
+        "endtype": "zone2",
         "mobility": "Thoracic opener + pec stretch, 10 min",
         "mindful": "5 min box breathing",
         "travel": "Hotel: DB press + DB curls. No gym: deep push-ups, band curls, slow tempo.",
@@ -192,9 +194,10 @@ DAY_TEMPLATE = [
     {  # Tuesday
         "name": "Tuesday",
         "focus": "Back + Triceps",
-        "workout": "Weighted pull-ups, barbell row, lat pulldown, face pull; close-grip bench, rope pushdown, overhead extension. 3-4 sets.",
-        "endurance": "VO2 Bike",
-        "intensity": "Hard",
+        "compound": "Weighted pull-up",
+        "accessories": ["Barbell row", "Lat pulldown", "Face pull",
+                        "Close-grip bench", "Rope pushdown", "Overhead extension"],
+        "endtype": "vo2",
         "mobility": "Lat + lower-back decompression, 10 min",
         "mindful": "5 min gratitude journaling",
         "travel": "Hotel: DB row + bench dips. No gym: doorway rows, band pulldown, diamond push-ups.",
@@ -202,9 +205,9 @@ DAY_TEMPLATE = [
     {  # Wednesday
         "name": "Wednesday",
         "focus": "Legs Volume",
-        "workout": "Back squat, leg press, walking lunge, leg curl, calf raise. High volume, 3-4 sets, controlled tempo.",
-        "endurance": "Easy Run",
-        "intensity": "Easy",
+        "compound": "Back squat",
+        "accessories": ["Leg press", "Walking lunge", "Leg curl", "Calf raise"],
+        "endtype": "easyrun",
         "mobility": "Hip flexor + ankle mobility, 10 min",
         "mindful": "5 min body scan",
         "travel": "Hotel: goblet squat + DB lunge. No gym: Bulgarian split squat, step-ups, tempo squats.",
@@ -212,9 +215,9 @@ DAY_TEMPLATE = [
     {  # Thursday
         "name": "Thursday",
         "focus": "Shoulders",
-        "workout": "Overhead press, DB lateral raise, rear-delt fly, upright row, shrugs. 3-4 sets, control on raises.",
-        "endurance": "Threshold Cycle",
-        "intensity": "Hard",
+        "compound": "Overhead press",
+        "accessories": ["DB lateral raise", "Rear-delt fly", "Upright row", "Shrug"],
+        "endtype": "threshold",
         "mobility": "Shoulder CARs + band dislocates, 10 min",
         "mindful": "5 min focus meditation",
         "travel": "Hotel: DB press + raises. No gym: pike push-ups, band laterals, backpack press.",
@@ -222,9 +225,9 @@ DAY_TEMPLATE = [
     {  # Friday
         "name": "Friday",
         "focus": "Chest + Back Density",
-        "workout": "Superset bench & row density blocks, incline press, chest-supported row, fly + pulldown. Short rest, high density.",
-        "endurance": "Hybrid: Carries / Burpees / Lunges",
-        "intensity": "Moderate",
+        "compound": "Bench / row superset",
+        "accessories": ["Incline press", "Chest-supported row", "Cable fly", "Lat pulldown"],
+        "endtype": "hybrid",
         "mobility": "Full upper-body flush, 10 min",
         "mindful": "5 min intention setting",
         "travel": "Hotel: DB density supersets. No gym: push-up/row ladders + loaded carries with bags.",
@@ -232,9 +235,9 @@ DAY_TEMPLATE = [
     {  # Saturday
         "name": "Saturday",
         "focus": "Legs + Posterior Chain",
-        "workout": "Deadlift / RDL, front squat, hip thrust, Nordic curl, back extension. Heavy posterior-chain emphasis.",
-        "endurance": "Long Ride",
-        "intensity": "Long",
+        "compound": "Deadlift / RDL",
+        "accessories": ["Front squat", "Hip thrust", "Nordic curl", "Back extension"],
+        "endtype": "longride",
         "mobility": "Hamstring + glute release, 12 min",
         "mindful": "10 min outdoor mindfulness",
         "travel": "Hotel: DB RDL + hip thrust. No gym: single-leg RDL, hip bridges, long Zone 2 ride/run.",
@@ -242,42 +245,101 @@ DAY_TEMPLATE = [
     {  # Sunday
         "name": "Sunday",
         "focus": "Arms + Core",
-        "workout": "Barbell curl, hammer curl, skullcrusher, pushdown; hanging leg raise, plank, cable crunch, pallof press.",
-        "endurance": "Long Run",
-        "intensity": "Long",
+        "compound": "Barbell curl",
+        "accessories": ["Hammer curl", "Skullcrusher", "Rope pushdown",
+                        "Hanging leg raise", "Plank", "Pallof press"],
+        "endtype": "longrun",
         "mobility": "Spine + hip flow, 12 min",
         "mindful": "10 min reflection / week review",
         "travel": "Hotel: DB arms + core circuit. No gym: band curls, dips, planks, long easy run.",
     },
 ]
 
-def coach_brief(weekday_idx, wave, ftp):
-    z = zones(ftp)
-    name = DAY_TEMPLATE[weekday_idx]["name"]
-    rpe = WAVE_RPE[wave]
-    if name == "Monday":
-        zt = z["Z2 Endurance"]
-        return f"{WAVE_NAMES[wave]} week. Push strength at {rpe}. Cycle Zone 2 {zt[0]}-{zt[1]}W, nose-breathing pace 40-60 min."
-    if name == "Tuesday":
-        zt = z["Z5 VO2 Max"]
-        return f"VO2 intervals {zt[0]}-{zt[1]}W, e.g. 5-6x3min hard / 3min easy. Back work at {rpe}."
-    if name == "Wednesday":
-        return f"Leg volume day at {rpe}. Easy aerobic run after, conversational pace, keep HR low to aid recovery."
-    if name == "Thursday":
-        zt = z["Z4 Threshold"]
-        return f"Threshold cycle {zt[0]}-{zt[1]}W, 2-3x10-15min. Shoulders at {rpe}; control lateral raises."
-    if name == "Friday":
-        return f"Density day: minimise rest, chase the pump at {rpe}. Hybrid finisher: carries, burpees, lunges 12-15 min."
-    if name == "Saturday":
-        zt = z["Z2 Endurance"]
-        return f"Heavy posterior chain at {rpe}. Long ride Zone 2 {zt[0]}-{zt[1]}W, build duration through the block."
-    # Sunday
-    return f"Arms & core at {rpe}. Long run 80% easy, conversational. Reflect & log the week's wins."
+# Wave-specific set/rep schemes: (compound scheme, accessory scheme)
+WAVE_SCHEME = {
+    1: ("4x6", "3x8-10"),
+    2: ("5x5", "4x10-12"),
+    3: ("5x5 (RPE8)", "4x12-15"),
+    4: ("3x5 light", "2x8 (-40% vol)"),
+}
 
-def deload_adjust(text, wave):
+def build_workout(weekday_idx, wave):
+    t = DAY_TEMPLATE[weekday_idx]
+    cs, accs = WAVE_SCHEME[wave]
+    acc = ", ".join(t["accessories"])
+    txt = f"{t['compound']} {cs}. {acc} {accs}."
     if wave == 4:
-        return "DELOAD: " + text
-    return text
+        txt = "DELOAD — " + txt
+    return txt
+
+def z2_str(ftp):
+    return f"{int(ftp*0.56)}-{int(ftp*0.75)}W"
+def z4_str(ftp):
+    return f"{int(ftp*0.91)}-{int(ftp*1.05)}W"
+def z5_str(ftp):
+    return f"{int(ftp*1.06)}-{int(ftp*1.20)}W"
+
+def hm(mins):
+    h, m = divmod(int(mins), 60)
+    return f"{h}h{m:02d}" if h else f"{m} min"
+
+def build_endurance(weekday_idx, w):
+    """Return (label, intensity) for the endurance/HIIT column, week-specific."""
+    et = DAY_TEMPLATE[weekday_idx]["endtype"]
+    ftp = ftp_target(w)
+    blk = block_for_week(w)
+    wave = wave_for_week(w)
+    deload = (wave == 4)
+    if et == "zone2":
+        dur = 40 + (blk - 1) * 5 + (10 if wave == 3 else 0)
+        if deload:
+            dur = 30
+        return f"Zone 2 Cycle {hm(dur)} @ {z2_str(ftp)}", "Easy"
+    if et == "vo2":
+        reps = 5 if blk <= 2 else 6
+        if deload:
+            reps = 3
+        return f"VO2 Bike {reps}x3min @ {z5_str(ftp)} / 3min easy", ("Moderate" if deload else "Hard")
+    if et == "easyrun":
+        dur = 30 + (blk - 1) * 5 + (5 if wave == 3 else 0)
+        if deload:
+            dur = 25
+        return f"Easy Run {hm(dur)} conversational (Zone 2)", "Easy"
+    if et == "threshold":
+        scheme = {1: "2x10min", 2: "2x12min", 3: "3x12min", 4: "2x8min"}[wave]
+        return f"Threshold Cycle {scheme} @ {z4_str(ftp)}", ("Moderate" if deload else "Hard")
+    if et == "hybrid":
+        rounds = {1: 3, 2: 4, 3: 5, 4: 3}[wave]
+        return (f"Hybrid {rounds} rounds: 40m carry + 12 burpees + 20 lunges", "Moderate")
+    if et == "longride":
+        dur = 90 + (blk - 1) * 15 + (15 if wave == 3 else 0)
+        if deload:
+            dur = max(60, dur - 60)
+        return f"Long Ride {hm(dur)} Zone 2 @ {z2_str(ftp)}", "Long"
+    # longrun
+    dur = 45 + (blk - 1) * 7 + (8 if wave == 3 else 0)
+    if deload:
+        dur = 35
+    return f"Long Run {hm(dur)} easy (Zone 2)", "Long"
+
+def coach_brief(weekday_idx, wave, ftp):
+    name = DAY_TEMPLATE[weekday_idx]["name"]
+    phase = WAVE_NAMES[wave]
+    rpe = WAVE_RPE[wave]
+    cs, accs = WAVE_SCHEME[wave]
+    if name == "Monday":
+        return f"{phase} week. Bench {cs} at {rpe}; accessories {accs}. Cycle is true Zone 2 recovery — nose-breathing only."
+    if name == "Tuesday":
+        return f"{phase}. Pulls {cs} at {rpe}. Fully recover between VO2 reps so you hit the watts every interval."
+    if name == "Wednesday":
+        return f"{phase}. Squat {cs} at {rpe}, accessories {accs}. Keep the run genuinely easy to aid leg recovery."
+    if name == "Thursday":
+        return f"{phase}. OHP {cs} at {rpe}; strict laterals. Threshold should feel 'comfortably hard', short phrases only."
+    if name == "Friday":
+        return f"{phase}. Minimise rest, chase the pump at {rpe}. Hybrid finisher: carries, burpees, lunges — no rower."
+    if name == "Saturday":
+        return f"{phase}. Heavy posterior chain {cs} at {rpe}. Fuel the long ride hourly to protect fat loss & recovery."
+    return f"{phase}. Arms & core at {rpe}. Long run is 80% easy volume — keep it conversational. Log the week's wins."
 
 # ============================================================================
 # SHEET 1 — START HERE
@@ -535,14 +597,29 @@ rec = [
     ("Resting HR (bpm)", "", 50, "down", "Should drift down as aerobic base builds."),
     ("Recovery score (1-10)", "", 8, "up", "<5 = swap to travel-alt or deload day."),
 ]
+DLOG_COMP = "'Daily Log'!F5:F172"   # completion column
+DLOG_RPE = "'Daily Log'!G5:G172"    # RPE column
 for name, base_ref, tgt, direction, guide in rec:
     ws.cell(r, 2, name).font = BODY_B
     if base_ref:
         ws.cell(r, 3, f"={base_ref}").alignment = CTR
-    cc = ws.cell(r, 4); cc.fill = FILL_INPUT; cc.alignment = CTR; cc.font = BODY_B
+    cc = ws.cell(r, 4); cc.alignment = CTR; cc.font = BODY_B
+    if name == "Compliance (%)":
+        # Auto: completed (Yes + Travel Alt) over all logged sessions
+        cc.value = (f'=IFERROR((COUNTIF({DLOG_COMP},"Yes")+COUNTIF({DLOG_COMP},'
+                    f'"Travel Alt"))/COUNTA({DLOG_COMP}),"")')
+        cc.number_format = "0%"
+        ws.cell(r, 7, "AUTO from Daily Log. Aim 90%+.").font = MUTED
+    else:
+        cc.fill = FILL_INPUT
+        ws.cell(r, 7, guide).font = MUTED
     ws.cell(r, 5, tgt if not isinstance(tgt, str) else f"={tgt}").alignment = CTR
-    tr = ws.cell(r, 6); tr.alignment = CTR; tr.fill = FILL_INPUT  # editable arrow/score
-    ws.cell(r, 7, guide).font = MUTED
+    if name == "Compliance (%)":
+        ws.cell(r, 5).number_format = "0%"
+        ws.cell(r, 5).value = 0.9
+    tr = ws.cell(r, 6); tr.alignment = CTR
+    if name != "Compliance (%)":
+        tr.fill = FILL_INPUT  # editable arrow/score
     for col in range(2, 8):
         ws.cell(r, col).border = BORDER
     ws.cell(r, 2).alignment = LEFT
@@ -552,12 +629,12 @@ rec_end = r - 1
 
 # Conditional formatting: compliance & recovery
 ws.conditional_formatting.add(
-    f"D{rec_start}:D{rec_start}",  # compliance %
-    CellIsRule(operator="greaterThanOrEqual", formula=["90"],
+    f"D{rec_start}:D{rec_start}",  # compliance % (fraction)
+    CellIsRule(operator="greaterThanOrEqual", formula=["0.9"],
                fill=PatternFill("solid", fgColor="C6EFCE")))
 ws.conditional_formatting.add(
     f"D{rec_start}:D{rec_start}",
-    CellIsRule(operator="lessThan", formula=["75"],
+    CellIsRule(operator="lessThan", formula=["0.75"],
                fill=PatternFill("solid", fgColor="FFC7CE")))
 ws.conditional_formatting.add(
     f"D{rec_end}:D{rec_end}",  # recovery score 1-10
@@ -662,10 +739,10 @@ for d in range(168):
     dc = ws.cell(rr, 3, date); dc.number_format = "ddd dd mmm"; dc.alignment = CTR
     ws.cell(rr, 4, t["name"]).alignment = CTR
     ws.cell(rr, 5, t["focus"]).alignment = LEFT_TOP
-    ws.cell(rr, 6, deload_adjust(t["workout"], wave)).alignment = LEFT_TOP
-    ws.cell(rr, 7, t["endurance"]).alignment = LEFT_TOP
-    intensity = t["intensity"] if wave != 4 else "Easy"
-    ws.cell(rr, 8, intensity).alignment = CTR
+    ws.cell(rr, 6, build_workout(weekday_idx, wave)).alignment = LEFT_TOP
+    end_label, end_int = build_endurance(weekday_idx, w)
+    ws.cell(rr, 7, end_label).alignment = LEFT_TOP
+    ws.cell(rr, 8, end_int).alignment = CTR
     ws.cell(rr, 9, t["mobility"]).alignment = LEFT_TOP
     ws.cell(rr, 10, t["mindful"]).alignment = LEFT_TOP
     ws.cell(rr, 11, t["travel"]).alignment = LEFT_TOP
@@ -1273,7 +1350,9 @@ for d in range(168):
     ws.cell(rr, 2, w).alignment = CTR
     dc = ws.cell(rr, 3, date); dc.number_format = "ddd dd mmm"; dc.alignment = CTR
     ws.cell(rr, 4, t["name"]).alignment = CTR
-    ws.cell(rr, 5, f"{t['focus']} + {t['endurance']}").alignment = LEFT
+    end_label, _ = build_endurance(weekday_idx, w)
+    end_short = end_label.split(" @")[0].split(" conversational")[0]
+    ws.cell(rr, 5, f"{t['focus']} + {end_short}").alignment = LEFT
     for c in range(6, 12):
         ws.cell(rr, c).fill = FILL_INPUT
         ws.cell(rr, c).alignment = CTR
@@ -1329,8 +1408,21 @@ for w in range(1, WEEKS + 1):
     ws.cell(rr, 1, w).alignment = CTR
     ws.cell(rr, 2, WAVE_NAMES[wave]).alignment = CTR
     ws.cell(rr, 2).fill = PatternFill("solid", fgColor=phase_fills[WAVE_NAMES[wave]])
-    for c in range(3, 8):
-        ws.cell(rr, c).fill = FILL_INPUT
+    # C Weight, D FTP — editable actuals (yellow)
+    ws.cell(rr, 3).fill = FILL_INPUT
+    ws.cell(rr, 4).fill = FILL_INPUT
+    # E Compliance %, F Avg RPE — auto from Daily Log for this week
+    ls = 5 + (w - 1) * 7
+    le = ls + 6
+    ce = ws.cell(rr, 5)
+    ce.value = (f'=IFERROR((COUNTIF(\'Daily Log\'!F{ls}:F{le},"Yes")+'
+                f'COUNTIF(\'Daily Log\'!F{ls}:F{le},"Travel Alt"))/'
+                f'COUNTA(\'Daily Log\'!F{ls}:F{le}),"")')
+    ce.number_format = "0%"
+    cf = ws.cell(rr, 6)
+    cf.value = f'=IFERROR(AVERAGE(\'Daily Log\'!G{ls}:G{le}),"")'
+    cf.number_format = "0.0"
+    ws.cell(rr, 7).fill = FILL_INPUT
     ws.cell(rr, 7).alignment = LEFT_TOP
     for c in range(1, 8):
         ws.cell(rr, c).border = BORDER
@@ -1342,10 +1434,10 @@ for w in range(1, WEEKS + 1):
     ws.row_dimensions[rr].height = 30
 rev_end = rev_start + WEEKS - 1
 ws.conditional_formatting.add(f"E{rev_start}:E{rev_end}",
-    CellIsRule(operator="greaterThanOrEqual", formula=["90"],
+    CellIsRule(operator="greaterThanOrEqual", formula=["0.9"],
                fill=PatternFill("solid", fgColor="C6EFCE")))
 ws.conditional_formatting.add(f"E{rev_start}:E{rev_end}",
-    CellIsRule(operator="lessThan", formula=["75"],
+    CellIsRule(operator="lessThan", formula=["0.75"],
                fill=PatternFill("solid", fgColor="FFC7CE")))
 ws.conditional_formatting.add(f"F{rev_start}:F{rev_end}",
     ColorScaleRule(start_type="num", start_value=4, start_color="C6EFCE",
