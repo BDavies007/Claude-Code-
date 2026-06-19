@@ -114,7 +114,10 @@ def zebra(ws, r0, r1, ncols):
 # Wave / progression model
 # ----------------------------------------------------------------------------
 START = dt.date(2026, 6, 22)
-WEEKS = 24
+WEEKS = 26                 # full scope: 6x4-week waves (1-24) + Taper (25) + Test (26)
+PROG_WEEKS = 24            # progression slope anchored to 24 so weeks 1-24 are unchanged
+DAYS = WEEKS * 7           # 182 days
+LOG_LAST = 4 + DAYS        # last data row in Daily Plan / Daily Log (header on row 4)
 WAVE_NAMES = {1: "Accumulation", 2: "Progression", 3: "Peak Volume", 4: "Deload"}
 WAVE_RPE = {1: "RPE 7 (2-3 RIR)", 2: "RPE 7-8 (2 RIR)",
             3: "RPE 8 (1-2 RIR)", 4: "RPE 5-6 (deload)"}
@@ -137,29 +140,82 @@ WAVE_REC = {
     4: "Extra sleep, easy walks, massage/sauna. Re-test KPIs end of week.",
 }
 
-def wave_for_week(w):           # w is 1..24
+# Finishing block (weeks 25-26) lives outside the 4-week wave.
+TAIL_NAME = {25: "Taper", 26: "Test & Lock"}
+TAIL_RPE = {25: "RPE 6-7 (sharpen)", 26: "Test efforts (max)"}
+TAIL_STR = {
+    25: "Taper: cut strength volume ~30%, keep some intensity. Prime the nervous system; stay sharp & fresh.",
+    26: "Test week: re-test bench & squat (heavy triples), minimal accessory volume. Confirm strength held.",
+}
+TAIL_END = {
+    25: "Sharpen: short race-pace touches, big drop in easy volume, full freshness for testing.",
+    26: "Test: 20-min FTP test, 5km time-trial, VO2 check. Minimal filler, maximal readiness.",
+}
+TAIL_REC = {
+    25: "Maximise sleep & mobility, reduce life stress. Arrive at test week fully primed.",
+    26: "Full recovery between tests. Re-test all KPIs, log PBs, celebrate & plan the next block.",
+}
+
+# Shared phase -> fill colour map (used by START HERE, Roadmap, Weekly Review)
+phase_fills_legend = {
+    "Accumulation": "DCE6F1",
+    "Progression": "D5E8D4",
+    "Peak Volume": "FCE4D6",
+    "Deload": "EDEDED",
+    "Taper": "FFF2CC",
+    "Test & Lock": "E6D5F2",
+}
+
+def is_tail(w):
+    return w >= 25
+
+def wave_for_week(w):           # w is 1..24 (wave phase); 25-26 handled separately
     return ((w - 1) % 4) + 1
 
-def block_for_week(w):          # 1..6
+def block_for_week(w):          # 1..6 for weeks 1-24
     return ((w - 1) // 4) + 1
 
+def phase_name(w):
+    return TAIL_NAME[w] if is_tail(w) else WAVE_NAMES[wave_for_week(w)]
+
+def phase_rpe(w):
+    return TAIL_RPE[w] if is_tail(w) else WAVE_RPE[wave_for_week(w)]
+
+def strat_str(w):
+    return TAIL_STR[w] if is_tail(w) else WAVE_STR[wave_for_week(w)]
+
+def strat_end(w):
+    return TAIL_END[w] if is_tail(w) else WAVE_END[wave_for_week(w)]
+
+def strat_rec(w):
+    return TAIL_REC[w] if is_tail(w) else WAVE_REC[wave_for_week(w)]
+
 def ftp_target(w):
-    # 215 -> 275 across 24 weeks, deload weeks ease back slightly
-    base = 215 + (275 - 215) * (w - 1) / (WEEKS - 1)
-    if wave_for_week(w) == 4 and w != WEEKS:
+    # 215 -> 275 across the 24-week build; weeks 25-26 hold the 275 goal
+    if w >= PROG_WEEKS:
+        return 275
+    base = 215 + (275 - 215) * (w - 1) / (PROG_WEEKS - 1)
+    if wave_for_week(w) == 4:
         base -= 3
     return round(base)
 
 def weight_target(w):
-    # 100 -> 85 across 24 weeks
-    return round(100 - (100 - 85) * (w - 1) / (WEEKS - 1), 1)
+    # 100 -> 85 across the 24-week build; locked at 85 through test weeks
+    if w >= PROG_WEEKS:
+        return 85.0
+    return round(100 - (100 - 85) * (w - 1) / (PROG_WEEKS - 1), 1)
 
 def vo2_target(w):
-    return round(41 + (50 - 41) * (w - 1) / (WEEKS - 1), 1)
+    if w >= PROG_WEEKS:
+        return 50.0
+    return round(41 + (50 - 41) * (w - 1) / (PROG_WEEKS - 1), 1)
 
 def fivek_target(w):
-    # 32:00 -> 26:00 (mid of 25-27) in seconds
-    total = 32 * 60 - (32 * 60 - 26 * 60) * (w - 1) / (WEEKS - 1)
+    # 32:00 -> 26:00 (mid of 25-27) in seconds across the build; held at test
+    if w >= PROG_WEEKS:
+        total = 26 * 60
+    else:
+        total = 32 * 60 - (32 * 60 - 26 * 60) * (w - 1) / (PROG_WEEKS - 1)
     m, s = divmod(int(round(total)), 60)
     return f"{m}:{s:02d}"
 
@@ -263,12 +319,44 @@ WAVE_SCHEME = {
     4: ("3x5 light", "2x8 (-40% vol)"),
 }
 
-def build_workout(weekday_idx, wave):
+def scheme_for_week(w):
+    if w == 25:
+        return ("3x4 (sharp)", "2x8 light")
+    if w == 26:
+        return ("heavy triple (test)", "light")
+    return WAVE_SCHEME[wave_for_week(w)]
+
+# Week 26 — testing block. Per-weekday strength prescription.
+TEST_WORKOUT = {
+    "Monday": "TEST — Bench press: warm up, work to a heavy 3-5 rep max. Confirm 105kg+. Light arms 2x12 after.",
+    "Tuesday": "Easy technical pulls 2x8 + mobility. Stay fresh for tomorrow's squat test.",
+    "Wednesday": "TEST — Back squat: work to a heavy 3-5 rep max. Confirm 140kg+. Light accessories only.",
+    "Thursday": "Easy press 2x8 + shoulder mobility. Keep totally fresh for the weekend.",
+    "Friday": "Light full-body flush 2x10. No conditioning grind — prime for the FTP & 5km tests.",
+    "Saturday": "Movement prep only — the FTP test is today's session (see Endurance).",
+    "Sunday": "Light arms/core 2x12 — the 5km time-trial is today's session (see Endurance).",
+}
+TEST_END = {
+    "Monday": ("Easy spin 20 min — open the legs", "Easy"),
+    "Tuesday": ("Optional 15 min easy spin", "Easy"),
+    "Wednesday": ("Easy 20 min shakeout jog", "Easy"),
+    "Thursday": ("Easy spin 20 min + 3x1min openers", "Easy"),
+    "Friday": ("Rest / 20 min mobility walk", "Easy"),
+    "Saturday": ("FTP TEST: warm up, then 20-min max effort -> new FTP = 95% of avg power. Target 275W+", "Test"),
+    "Sunday": ("5KM TIME-TRIAL: even pace, target 25:00-27:00. The headline test.", "Test"),
+}
+
+def build_workout(weekday_idx, w):
+    name = DAY_TEMPLATE[weekday_idx]["name"]
+    if w == 26:
+        return TEST_WORKOUT[name]
     t = DAY_TEMPLATE[weekday_idx]
-    cs, accs = WAVE_SCHEME[wave]
+    cs, accs = scheme_for_week(w)
     acc = ", ".join(t["accessories"])
     txt = f"{t['compound']} {cs}. {acc} {accs}."
-    if wave == 4:
+    if w == 25:
+        txt = "TAPER — " + txt
+    elif wave_for_week(w) == 4:
         txt = "DELOAD — " + txt
     return txt
 
@@ -286,10 +374,26 @@ def hm(mins):
 def build_endurance(weekday_idx, w):
     """Return (label, intensity) for the endurance/HIIT column, week-specific."""
     et = DAY_TEMPLATE[weekday_idx]["endtype"]
+    name = DAY_TEMPLATE[weekday_idx]["name"]
     ftp = ftp_target(w)
     blk = block_for_week(w)
     wave = wave_for_week(w)
     deload = (wave == 4)
+    # Test week: bespoke per-day endurance (tests live on Sat/Sun)
+    if w == 26:
+        return TEST_END[name]
+    # Taper week: reduced volume, a touch of sharpness
+    if w == 25:
+        taper = {
+            "zone2": (f"Zone 2 Cycle 30 min @ {z2_str(ftp)}", "Easy"),
+            "vo2": (f"VO2 Bike 3x2min @ {z5_str(ftp)} (sharpen)", "Moderate"),
+            "easyrun": ("Easy Run 25 min conversational (Zone 2)", "Easy"),
+            "threshold": (f"Threshold Cycle 2x6min @ {z4_str(ftp)} (sharpen)", "Moderate"),
+            "hybrid": ("Hybrid 2 rounds (sharpen): 40m carry + 8 burpees + 12 lunges", "Easy"),
+            "longride": (f"Long Ride 60 min Zone 2 @ {z2_str(ftp)}", "Moderate"),
+            "longrun": ("Long Run 30 min easy (Zone 2)", "Easy"),
+        }
+        return taper[et]
     if et == "zone2":
         dur = 40 + (blk - 1) * 5 + (10 if wave == 3 else 0)
         if deload:
@@ -322,11 +426,25 @@ def build_endurance(weekday_idx, w):
         dur = 35
     return f"Long Run {hm(dur)} easy (Zone 2)", "Long"
 
-def coach_brief(weekday_idx, wave, ftp):
+def coach_brief(weekday_idx, w):
     name = DAY_TEMPLATE[weekday_idx]["name"]
-    phase = WAVE_NAMES[wave]
-    rpe = WAVE_RPE[wave]
-    cs, accs = WAVE_SCHEME[wave]
+    phase = phase_name(w)
+    rpe = phase_rpe(w)
+    cs, accs = scheme_for_week(w)
+    if w == 26:
+        test = {
+            "Monday": "Bench test — work to a heavy triple, confirm you've held 105kg+. Easy spin to open the legs.",
+            "Tuesday": "Recovery & prep. Easy technical pulls only; stay fresh for the squat test tomorrow.",
+            "Wednesday": "Squat test — heavy triple, confirm 140kg+ maintained. Easy shakeout jog only.",
+            "Thursday": "Stay fresh: easy press, mobility, big sleep. FTP test is in two days.",
+            "Friday": "Rest day in all but name. Light flush + walk. Fuel well for the weekend tests.",
+            "Saturday": "FTP TEST: thorough warm-up, then a 20-min max effort. New FTP = 95% of avg power. Target 275W+.",
+            "Sunday": "5KM TIME-TRIAL: even pacing, empty the tank. Target sub-27. Log your PBs and celebrate the build.",
+        }
+        return test[name]
+    if w == 25:
+        return ("Taper week — sharpen and rest. Cut volume ~30%, keep a little intensity, "
+                "prioritise sleep & mobility. Arrive at test week fresh and primed.")
     if name == "Monday":
         return f"{phase} week. Bench {cs} at {rpe}; accessories {accs}. Cycle is true Zone 2 recovery — nose-breathing only."
     if name == "Tuesday":
@@ -349,7 +467,7 @@ ws.title = "START HERE"
 set_widths(ws, [3, 26, 30, 30, 22, 18, 18, 18])
 ws.sheet_view.showGridLines = False
 title_block(ws, "PROJECT 85 — CEO ATHLETE SYSTEM",
-            "24-Week Hybrid Performance Build  •  Barrie 'Bdog' Davies  •  Start Mon 22 Jun 2026", span=8)
+            "26-Week Hybrid Performance Build  •  Barrie 'Bdog' Davies  •  Start Mon 22 Jun 2026", span=8)
 
 r = 4
 r = section(ws, r, "MISSION", span=8)
@@ -357,7 +475,8 @@ ws.merge_cells(start_row=r, start_column=2, end_row=r+2, end_column=8)
 ws.cell(r, 2, ("Become a CEO-grade hybrid athlete: leaner, stronger, and more aerobically powerful. "
                "Drop to 85kg while building muscle and tendon density, lift a 275W FTP, and run a sub-27 5km — "
                "all on a travel-proof system that survives a full gym, a hotel gym, or no gym at all. "
-               "Train daily with varying intensity, recover deliberately, and compound small wins for 24 weeks."))
+               "Train daily with varying intensity, recover deliberately, and compound small wins across a "
+               "26-week build: six 4-week waves, then a taper and a test week to lock in the gains."))
 ws.cell(r, 2).alignment = WRAP_TOP
 ws.cell(r, 2).font = BODY
 ws.row_dimensions[r].height = 18
@@ -367,11 +486,11 @@ r = section(ws, r, "BASELINE  →  TARGET", span=8)
 header_row(ws, r, ["", "Metric", "Baseline", "Target", "Window", "", "", ""])
 r += 1
 baseline_rows = [
-    ("Body weight", "100 kg", "85 kg", "24 weeks"),
-    ("FTP (cycling)", "215 W", "275 W", "24 weeks"),
+    ("Body weight", "100 kg", "85 kg", "26 weeks"),
+    ("FTP (cycling)", "215 W", "275 W", "26 weeks"),
     ("FTP / kg", "2.15 W/kg", "3.24 W/kg", "derived"),
-    ("VO2 Max", "41", "50+", "24 weeks"),
-    ("5 km run", "32:00", "25:00 - 27:00", "24 weeks"),
+    ("VO2 Max", "41", "50+", "26 weeks"),
+    ("5 km run", "32:00", "25:00 - 27:00", "26 weeks"),
     ("Bench press", "105 kg", "Maintain 105 kg+", "ongoing"),
     ("Back squat", "140 kg", "Maintain 140 kg+", "ongoing"),
 ]
@@ -390,7 +509,7 @@ r = section(ws, r, "HOW TO USE THIS WORKBOOK", span=8)
 how = [
     "1. Open the Inputs sheet and confirm your baseline numbers and targets. Everything downstream reads from here.",
     "2. Check the Executive Dashboard each Monday for your live KPIs and where you stand vs target.",
-    "3. Follow the Daily Plan — one row per day for 168 days. Each row tells you exactly what to train.",
+    "3. Follow the Daily Plan — one row per day for 182 days (26 weeks). Each row tells you exactly what to train.",
     "4. Log every session in the Daily Log: mark Completed (Yes / No / Partial / Travel Alt) and your RPE.",
     "5. Travelling? Use the Travel Playbook and the Travel Alternative column for hotel-gym or no-gym swaps.",
     "6. Every Sunday, fill the Weekly Coach Review to capture KPIs, compliance, and next-week adjustments.",
@@ -405,15 +524,24 @@ for line in how:
     r += 1
 r += 1
 
-r = section(ws, r, "THE 4-WEEK WAVE (REPEATED 6 TIMES)", span=8)
+r = section(ws, r, "STRUCTURE — 4-WEEK WAVE x6, THEN TAPER & TEST (26 WEEKS)", span=8)
 header_row(ws, r, ["", "Week", "Phase", "Strength", "Endurance", "RPE Cap", "", ""])
 r += 1
-for w in (1, 2, 3, 4):
-    ws.cell(r, 2, f"Week {w}").font = BODY_B
-    ws.cell(r, 3, WAVE_NAMES[w]).font = BODY_B
-    ws.cell(r, 4, WAVE_STR[w]).font = BODY
-    ws.cell(r, 5, WAVE_END[w]).font = BODY
-    ws.cell(r, 6, WAVE_RPE[w]).font = BODY
+wave_table = [
+    ("Wk 1 (x6)", "Accumulation", WAVE_STR[1], WAVE_END[1], WAVE_RPE[1]),
+    ("Wk 2 (x6)", "Progression", WAVE_STR[2], WAVE_END[2], WAVE_RPE[2]),
+    ("Wk 3 (x6)", "Peak Volume", WAVE_STR[3], WAVE_END[3], WAVE_RPE[3]),
+    ("Wk 4 (x6)", "Deload", WAVE_STR[4], WAVE_END[4], WAVE_RPE[4]),
+    ("Week 25", "Taper", TAIL_STR[25], TAIL_END[25], TAIL_RPE[25]),
+    ("Week 26", "Test & Lock", TAIL_STR[26], TAIL_END[26], TAIL_RPE[26]),
+]
+for wk, phase, strg, endr, rpe in wave_table:
+    ws.cell(r, 2, wk).font = BODY_B
+    ws.cell(r, 3, phase).font = BODY_B
+    ws.cell(r, 4, strg).font = BODY
+    ws.cell(r, 5, endr).font = BODY
+    ws.cell(r, 6, rpe).font = BODY
+    ws.cell(r, 3).fill = PatternFill("solid", fgColor=phase_fills_legend[phase])
     for c in range(2, 9):
         ws.cell(r, c).border = BORDER
         ws.cell(r, c).alignment = LEFT
@@ -435,7 +563,7 @@ r = section(ws, r, "ATHLETE", span=5)
 inputs_athlete = [
     ("Athlete name", "Barrie 'Bdog' Davies", "Who we are building"),
     ("Program start (Monday)", START, "Day 1 of Week 1"),
-    ("Program length (weeks)", 24, "6 x 4-week waves"),
+    ("Program length (weeks)", 26, "6 x 4-week waves + taper + test"),
     ("Training days / week", 7, "Daily varying intensity"),
 ]
 header_row(ws, r, ["", "Variable", "Value", "", "Note"])
@@ -462,7 +590,7 @@ r += 1
 metric_rows = {}
 metrics = [
     ("weight", "Body weight (kg)", 100, 85, "Fat loss + recomposition"),
-    ("ftp", "FTP (W)", 215, 275, "+60W in 24 weeks"),
+    ("ftp", "FTP (W)", 215, 275, "+60W across the build"),
     ("vo2", "VO2 Max", 41, 50, "Target 50+"),
     ("fivek", "5km time (mm:ss)", "32:00", "26:00", "Target window 25-27 min"),
     ("bench", "Bench press (kg)", 105, 110, "Maintain 105kg+"),
@@ -551,7 +679,7 @@ kpis = [
 ]
 # "last non-blank value" helper against a Daily Log column
 def last_log(col):
-    rng = f"'Daily Log'!{col}5:{col}172"
+    rng = f"'Daily Log'!{col}5:{col}{LOG_LAST}"
     return f'LOOKUP(2,1/({rng}<>""),{rng})'
 
 weight_row = kpi_start          # first KPI is Body weight
@@ -617,8 +745,8 @@ rec = [
     ("Resting HR (bpm)", "", 50, "down", "Should drift down as aerobic base builds."),
     ("Recovery score (1-10)", "", 8, "up", "<5 = swap to travel-alt or deload day."),
 ]
-DLOG_COMP = "'Daily Log'!F5:F172"   # completion column
-DLOG_RPE = "'Daily Log'!G5:G172"    # RPE column
+DLOG_COMP = f"'Daily Log'!F5:F{LOG_LAST}"   # completion column
+DLOG_RPE = f"'Daily Log'!G5:G{LOG_LAST}"    # RPE column
 for name, base_ref, tgt, direction, guide in rec:
     ws.cell(r, 2, name).font = BODY_B
     if base_ref:
@@ -632,12 +760,12 @@ for name, base_ref, tgt, direction, guide in rec:
         ws.cell(r, 7, "AUTO from Daily Log. Aim 90%+.").font = MUTED
     elif name == "Sleep (h/night)":
         # auto: average logged sleep (col I)
-        cc.value = '=IFERROR(AVERAGE(\'Daily Log\'!I5:I172),"")'
+        cc.value = f'=IFERROR(AVERAGE(\'Daily Log\'!I5:I{LOG_LAST}),"")'
         cc.number_format = "0.0"
         ws.cell(r, 7, "AUTO: avg logged sleep.").font = MUTED
     elif name == "HRV (ms)":
         # auto: average logged HRV (col J)
-        cc.value = '=IFERROR(AVERAGE(\'Daily Log\'!J5:J172),"")'
+        cc.value = f'=IFERROR(AVERAGE(\'Daily Log\'!J5:J{LOG_LAST}),"")'
         cc.number_format = "0"
         ws.cell(r, 7, "AUTO: avg logged HRV (watch 7-day trend).").font = MUTED
     else:
@@ -677,12 +805,12 @@ r = section(ws, r, "THIS WEEK", span=7)
 ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
 ws.cell(r, 2, "Current week #").font = BODY_B
 cw = ws.cell(r, 4); cw.alignment = CTR; cw.font = BODY_B
-# AUTO: weeks elapsed since program start (Inputs!C5), clamped to 1-24
-cw.value = f'=MEDIAN(1,24,INT((TODAY()-{REF_START})/7)+1)'
+# AUTO: weeks elapsed since program start, clamped to 1-26
+cw.value = f'=MEDIAN(1,26,INT((TODAY()-{REF_START})/7)+1)'
 ws.cell(r, 5, "Phase").font = BODY_B
 ph = ws.cell(r, 6)
-ph.value = (f'=IF(D{r}="","",CHOOSE(MOD(D{r}-1,4)+1,'
-            f'"Accumulation","Progression","Peak Volume","Deload"))')
+ph.value = (f'=IF(D{r}="","",IF(D{r}>=26,"Test & Lock",IF(D{r}=25,"Taper",'
+            f'CHOOSE(MOD(D{r}-1,4)+1,"Accumulation","Progression","Peak Volume","Deload"))))')
 ph.alignment = CTR; ph.font = BODY_B
 for col in range(2, 8):
     ws.cell(r, col).border = BORDER
@@ -697,13 +825,13 @@ ws.row_dimensions[r].height = 22
 ws.freeze_panes = "A3"
 
 # ============================================================================
-# SHEET 4 — 24 Week Roadmap
+# SHEET 4 — 26 Week Roadmap
 # ============================================================================
-ws = wb.create_sheet("24 Week Roadmap")
+ws = wb.create_sheet("26 Week Roadmap")
 set_widths(ws, [6, 8, 14, 13, 12, 13, 40, 40, 34])
 ws.sheet_view.showGridLines = False
-title_block(ws, "24-WEEK ROADMAP",
-            "One row per week. 6 blocks x 4-week wave (Accumulation, Progression, Peak, Deload).", span=9)
+title_block(ws, "26-WEEK ROADMAP",
+            "One row per week. 6 blocks x 4-week wave (1-24) + Taper (25) + Test & Lock (26).", span=9)
 r = 4
 header_row(ws, r, ["Wk", "Block", "Phase", "Weight kg", "FTP W", "FTP/kg",
                    "Strength Strategy", "Endurance Strategy", "Recovery Guidance"])
@@ -711,19 +839,18 @@ ws.row_dimensions[r].height = 30
 data_start = r + 1
 for w in range(1, WEEKS + 1):
     rr = r + w
-    wave = wave_for_week(w)
-    blk = block_for_week(w)
+    blk_label = "Finish" if is_tail(w) else f"B{block_for_week(w)}"
     wt = weight_target(w)
     ftp = ftp_target(w)
     ws.cell(rr, 1, w).alignment = CTR
-    ws.cell(rr, 2, f"B{blk}").alignment = CTR
-    ws.cell(rr, 3, WAVE_NAMES[wave]).alignment = CTR
+    ws.cell(rr, 2, blk_label).alignment = CTR
+    ws.cell(rr, 3, phase_name(w)).alignment = CTR
     ws.cell(rr, 4, wt).alignment = CTR
     ws.cell(rr, 5, ftp).alignment = CTR
     fk = ws.cell(rr, 6, f"=E{rr}/D{rr}"); fk.number_format = "0.00"; fk.alignment = CTR
-    ws.cell(rr, 7, WAVE_STR[wave]).alignment = LEFT_TOP
-    ws.cell(rr, 8, WAVE_END[wave]).alignment = LEFT_TOP
-    ws.cell(rr, 9, WAVE_REC[wave]).alignment = LEFT_TOP
+    ws.cell(rr, 7, strat_str(w)).alignment = LEFT_TOP
+    ws.cell(rr, 8, strat_end(w)).alignment = LEFT_TOP
+    ws.cell(rr, 9, strat_rec(w)).alignment = LEFT_TOP
     for c in range(1, 10):
         ws.cell(rr, c).border = BORDER
         ws.cell(rr, c).font = BODY
@@ -732,25 +859,20 @@ for w in range(1, WEEKS + 1):
 data_end = r + WEEKS
 
 # Color phases
-phase_fills = {
-    "Accumulation": "DCE6F1",
-    "Progression": "D5E8D4",
-    "Peak Volume": "FCE4D6",
-    "Deload": "EDEDED",
-}
+phase_fills = phase_fills_legend
 for w in range(1, WEEKS + 1):
     rr = r + w
-    ws.cell(rr, 3).fill = PatternFill("solid", fgColor=phase_fills[WAVE_NAMES[wave_for_week(w)]])
+    ws.cell(rr, 3).fill = PatternFill("solid", fgColor=phase_fills[phase_name(w)])
 ws.freeze_panes = "A5"
 
 # ============================================================================
-# SHEET 5 — Daily Plan (168 rows)
+# SHEET 5 — Daily Plan (182 rows)
 # ============================================================================
 ws = wb.create_sheet("Daily Plan")
 set_widths(ws, [6, 6, 13, 11, 18, 44, 24, 12, 22, 20, 30, 44, 13, 8, 22])
 ws.sheet_view.showGridLines = False
-title_block(ws, "DAILY PLAN — 168 DAYS",
-            "From Mon 22 Jun 2026. One row per day. Log completion, RPE & notes on the right.", span=15)
+title_block(ws, "DAILY PLAN — 182 DAYS",
+            "From Mon 22 Jun 2026 (26 weeks). One row per day. Log completion, RPE & notes on the right.", span=15)
 r = 4
 headers = ["Day", "Wk", "Date", "Weekday", "Strength Focus", "Workout",
            "Endurance / HIIT", "Intensity", "Mobility", "Mindfulness",
@@ -758,27 +880,25 @@ headers = ["Day", "Wk", "Date", "Weekday", "Strength Focus", "Workout",
 header_row(ws, r, headers)
 ws.row_dimensions[r].height = 30
 dp_start = r + 1
-for d in range(168):
+for d in range(DAYS):
     rr = dp_start + d
     date = START + dt.timedelta(days=d)
     weekday_idx = date.weekday()  # 0 = Monday
     w = d // 7 + 1
-    wave = wave_for_week(w)
-    ftp = ftp_target(w)
     t = DAY_TEMPLATE[weekday_idx]
     ws.cell(rr, 1, d + 1).alignment = CTR
     ws.cell(rr, 2, w).alignment = CTR
     dc = ws.cell(rr, 3, date); dc.number_format = "ddd dd mmm"; dc.alignment = CTR
     ws.cell(rr, 4, t["name"]).alignment = CTR
     ws.cell(rr, 5, t["focus"]).alignment = LEFT_TOP
-    ws.cell(rr, 6, build_workout(weekday_idx, wave)).alignment = LEFT_TOP
+    ws.cell(rr, 6, build_workout(weekday_idx, w)).alignment = LEFT_TOP
     end_label, end_int = build_endurance(weekday_idx, w)
     ws.cell(rr, 7, end_label).alignment = LEFT_TOP
     ws.cell(rr, 8, end_int).alignment = CTR
     ws.cell(rr, 9, t["mobility"]).alignment = LEFT_TOP
     ws.cell(rr, 10, t["mindful"]).alignment = LEFT_TOP
     ws.cell(rr, 11, t["travel"]).alignment = LEFT_TOP
-    ws.cell(rr, 12, coach_brief(weekday_idx, wave, ftp)).alignment = LEFT_TOP
+    ws.cell(rr, 12, coach_brief(weekday_idx, w)).alignment = LEFT_TOP
     # log cells (editable)
     cc = ws.cell(rr, 13); cc.fill = FILL_INPUT; cc.alignment = CTR
     rp = ws.cell(rr, 14); rp.fill = FILL_INPUT; rp.alignment = CTR
@@ -788,10 +908,10 @@ for d in range(168):
         ws.cell(rr, c).font = BODY
     ws.cell(rr, 5).font = BODY_B
     ws.row_dimensions[rr].height = 50
-dp_end = dp_start + 167
+dp_end = dp_start + DAYS - 1
 
 # Zebra by week band (alternate weeks lightly)
-for d in range(168):
+for d in range(DAYS):
     rr = dp_start + d
     w = d // 7 + 1
     if w % 2 == 0:
@@ -802,7 +922,7 @@ for d in range(168):
 # Intensity conditional formatting (col H)
 int_col = f"H{dp_start}:H{dp_end}"
 for val, color in [("Hard", "F8CBAD"), ("Moderate", "FFE699"),
-                   ("Easy", "C6E0B4"), ("Long", "BDD7EE")]:
+                   ("Easy", "C6E0B4"), ("Long", "BDD7EE"), ("Test", "E6D5F2")]:
     ws.conditional_formatting.add(
         int_col,
         CellIsRule(operator="equal", formula=[f'"{val}"'],
@@ -1372,7 +1492,7 @@ header_row(ws, r, ["Day", "Wk", "Date", "Weekday", "Planned Focus", "Completed",
                    "RPE", "Weight kg", "Sleep h", "HRV", "Mood", "Notes"])
 ws.row_dimensions[r].height = 28
 log_start = r + 1
-for d in range(168):
+for d in range(DAYS):
     rr = log_start + d
     date = START + dt.timedelta(days=d)
     weekday_idx = date.weekday()
@@ -1394,7 +1514,7 @@ for d in range(168):
         if not ws.cell(rr, c).font.bold:
             ws.cell(rr, c).font = BODY
     ws.row_dimensions[rr].height = 20
-log_end = log_start + 167
+log_end = log_start + DAYS - 1
 
 # dropdowns
 dv_comp2 = DataValidation(type="list", formula1='"Yes,No,Partial,Travel Alt"', allow_blank=True)
@@ -1429,17 +1549,16 @@ ws = wb.create_sheet("Weekly Coach Review")
 set_widths(ws, [4, 26, 16, 16, 16, 16, 40])
 ws.sheet_view.showGridLines = False
 title_block(ws, "WEEKLY COACH REVIEW",
-            "Fill every Sunday. Track KPIs, compliance & set next-week adjustments. Repeat for 24 weeks.", span=7)
+            "Fill every Sunday. Track KPIs, compliance & set next-week adjustments. Repeat for 26 weeks.", span=7)
 r = 4
 header_row(ws, r, ["Wk", "Phase", "Weight kg", "FTP W", "Compliance %", "Avg RPE", "Notes / Adjustments"])
 ws.row_dimensions[r].height = 26
 rev_start = r + 1
 for w in range(1, WEEKS + 1):
     rr = rev_start + w - 1
-    wave = wave_for_week(w)
     ws.cell(rr, 1, w).alignment = CTR
-    ws.cell(rr, 2, WAVE_NAMES[wave]).alignment = CTR
-    ws.cell(rr, 2).fill = PatternFill("solid", fgColor=phase_fills[WAVE_NAMES[wave]])
+    ws.cell(rr, 2, phase_name(w)).alignment = CTR
+    ws.cell(rr, 2).fill = PatternFill("solid", fgColor=phase_fills[phase_name(w)])
     # C Weight, D FTP — editable actuals (yellow)
     ws.cell(rr, 3).fill = FILL_INPUT
     ws.cell(rr, 4).fill = FILL_INPUT
@@ -1562,7 +1681,13 @@ Create a 24-week hybrid athlete coaching workbook starting Monday 2026-06-22 for
 - Wrap text.
 - Use sensible widths.
 - Make the layout iPad-friendly.
-- Keep it clean, coach-like, and practical."""
+- Keep it clean, coach-like, and practical.
+
+## Scope update (follow-up)
+- Extended to the full 26-week scope: the six 4-week waves (weeks 1-24) are
+  followed by Week 25 (Taper) and Week 26 (Test & Lock) to sharpen and re-test
+  all KPIs (FTP test, 5km time-trial, bench & squat) and confirm the targets.
+- Daily Plan and Daily Log now run 182 days; dashboard & coach review extended to 26 weeks."""
 r = 4
 for line in PROMPT_TEXT.split("\n"):
     cell = ws.cell(r, 2, line)
@@ -1589,7 +1714,7 @@ wb.properties.subject = "24-Week Hybrid Athlete Program"
 # Tab colours
 tab_colors = {
     "START HERE": NAVY, "Inputs": TEAL, "Executive Dashboard": SLATE,
-    "24 Week Roadmap": NAVY, "Daily Plan": ORANGE, "Workout Briefs": TEAL,
+    "26 Week Roadmap": NAVY, "Daily Plan": ORANGE, "Workout Briefs": TEAL,
     "Strength Progression": SLATE, "Cycling 80-20": NAVY, "Running 80-20": TEAL,
     "Hybrid System": SLATE, "Travel Playbook": ORANGE, "Exercise Library": NAVY,
     "Daily Log": ORANGE, "Weekly Coach Review": SLATE, "Claude Code Prompt": GREY,
