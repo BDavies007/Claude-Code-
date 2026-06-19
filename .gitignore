@@ -37,3 +37,6 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 .vercel
+
+# Generated static preview artifact (run `npm run snapshot` to regenerate)
+preview.html
