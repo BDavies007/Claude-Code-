@@ -441,11 +441,13 @@ inputs_athlete = [
 header_row(ws, r, ["", "Variable", "Value", "", "Note"])
 r += 1
 INPUT_REF = {}
+REF_START = "Inputs!C5"  # overwritten below to the actual start-date cell
 for var, val, note in inputs_athlete:
     ws.cell(r, 2, var).font = BODY_B
     c = ws.cell(r, 3, val); c.font = BODY_B; c.fill = FILL_INPUT
     if isinstance(val, dt.date):
         c.number_format = "ddd dd mmm yyyy"
+        REF_START = f"Inputs!C{r}"
     ws.cell(r, 5, note).font = MUTED
     for cc in range(2, 6):
         ws.cell(r, cc).border = BORDER
@@ -530,7 +532,8 @@ ws = wb.create_sheet("Executive Dashboard")
 set_widths(ws, [3, 24, 16, 16, 16, 14, 30])
 ws.sheet_view.showGridLines = False
 title_block(ws, "EXECUTIVE DASHBOARD",
-            "Live KPIs — update 'Current' (yellow) weekly. Targets pull from Inputs.", span=7)
+            "Live KPIs. Weight, FTP/kg, compliance, sleep & HRV auto-pull from the Daily Log; "
+            "yellow cells are manual. Targets pull from Inputs.", span=7)
 
 r = 4
 r = section(ws, r, "PERFORMANCE KPIs", span=7)
@@ -546,18 +549,35 @@ kpis = [
     ("Bench press (kg)", REF["bench_base"], 105, REF["bench_base"], "up"),
     ("Back squat (kg)", REF["squat_base"], 140, REF["squat_base"], "up"),
 ]
+# "last non-blank value" helper against a Daily Log column
+def last_log(col):
+    rng = f"'Daily Log'!{col}5:{col}172"
+    return f'LOOKUP(2,1/({rng}<>""),{rng})'
+
+weight_row = kpi_start          # first KPI is Body weight
 for name, base_ref, cur, tgt_ref, direction in kpis:
     ws.cell(r, 2, name).font = BODY_B
     cb = ws.cell(r, 3, f"={base_ref}")
     cb.alignment = CTR; cb.font = BODY
-    cc = ws.cell(r, 4)  # Current — editable yellow
-    cc.fill = FILL_INPUT; cc.alignment = CTR; cc.font = BODY_B
+    cc = ws.cell(r, 4)  # Current
+    cc.alignment = CTR; cc.font = BODY_B
+    if name == "Body weight (kg)":
+        # auto: latest logged body weight, else baseline
+        cc.value = f'=IFERROR({last_log("H")},C{r})'
+        ws.cell(r, 7, "AUTO: latest weight from Daily Log").font = MUTED
+    elif name == "FTP / kg (W/kg)":
+        # auto: current FTP / current weight (blank until FTP entered)
+        cc.value = f'=IF(OR(D{r-1}="",D{weight_row}=""),"",D{r-1}/D{weight_row})'
+        ws.cell(r, 7, "AUTO: current FTP / current weight").font = MUTED
+    else:
+        cc.fill = FILL_INPUT
+        ws.cell(r, 7, "Enter current value weekly").font = MUTED
     ct = ws.cell(r, 5, f"={tgt_ref}")
     ct.alignment = CTR; ct.font = BODY
     if name in ("Body weight (kg)", "FTP (W)", "VO2 Max", "Bench press (kg)", "Back squat (kg)"):
-        cb.number_format = "0.0"; ct.number_format = "0.0"
+        cb.number_format = "0.0"; ct.number_format = "0.0"; cc.number_format = "0.0"
     if name == "FTP / kg (W/kg)":
-        cb.number_format = "0.00"; ct.number_format = "0.00"
+        cb.number_format = "0.00"; ct.number_format = "0.00"; cc.number_format = "0.00"
     # % to goal formula (guard divide by zero)
     pcell = ws.cell(r, 6)
     if direction in ("up",):
@@ -571,7 +591,7 @@ for name, base_ref, cur, tgt_ref, direction in kpis:
         pcell.value = "—"
     pcell.number_format = "0%"
     pcell.alignment = CTR; pcell.font = BODY_B
-    ws.cell(r, 7, "Enter current value weekly").font = MUTED
+    ws.cell(r, 7).alignment = LEFT
     for col in range(2, 8):
         ws.cell(r, col).border = BORDER
     r += 1
@@ -610,6 +630,16 @@ for name, base_ref, tgt, direction, guide in rec:
                     f'"Travel Alt"))/COUNTA({DLOG_COMP}),"")')
         cc.number_format = "0%"
         ws.cell(r, 7, "AUTO from Daily Log. Aim 90%+.").font = MUTED
+    elif name == "Sleep (h/night)":
+        # auto: average logged sleep (col I)
+        cc.value = '=IFERROR(AVERAGE(\'Daily Log\'!I5:I172),"")'
+        cc.number_format = "0.0"
+        ws.cell(r, 7, "AUTO: avg logged sleep.").font = MUTED
+    elif name == "HRV (ms)":
+        # auto: average logged HRV (col J)
+        cc.value = '=IFERROR(AVERAGE(\'Daily Log\'!J5:J172),"")'
+        cc.number_format = "0"
+        ws.cell(r, 7, "AUTO: avg logged HRV (watch 7-day trend).").font = MUTED
     else:
         cc.fill = FILL_INPUT
         ws.cell(r, 7, guide).font = MUTED
@@ -646,7 +676,9 @@ r += 1
 r = section(ws, r, "THIS WEEK", span=7)
 ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
 ws.cell(r, 2, "Current week #").font = BODY_B
-cw = ws.cell(r, 4); cw.fill = FILL_INPUT; cw.alignment = CTR; cw.font = BODY_B; cw.value = 1
+cw = ws.cell(r, 4); cw.alignment = CTR; cw.font = BODY_B
+# AUTO: weeks elapsed since program start (Inputs!C5), clamped to 1-24
+cw.value = f'=MEDIAN(1,24,INT((TODAY()-{REF_START})/7)+1)'
 ws.cell(r, 5, "Phase").font = BODY_B
 ph = ws.cell(r, 6)
 ph.value = (f'=IF(D{r}="","",CHOOSE(MOD(D{r}-1,4)+1,'
