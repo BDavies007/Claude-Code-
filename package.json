@@ -12,7 +12,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "snapshot": "node scripts/snapshot.mjs"
+    "snapshot": "node scripts/snapshot.mjs",
+    "visuals": "node scripts/visuals.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.0",
