@@ -21,3 +21,23 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+
+### Node / Next.js ###
+node_modules/
+.next/
+out/
+build/
+dist/
+.env
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+.vercel
+
+# Generated static preview artifacts (run `npm run snapshot` to regenerate)
+preview.html
+landing-preview.html
