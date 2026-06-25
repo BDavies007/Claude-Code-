@@ -77,3 +77,29 @@ assets/js/app.js           Router, views, modal handling, event wiring
 Scripts are loaded as classic `<script>` tags (no ES modules, so it works over
 `file://`) and attach to a single global namespace, `window.BGORS`. Views are
 hash-routed: `#/dashboard`, `#/sites`, `#/operations`, `#/tasks`, `#/reports`.
+
+---
+
+## Lead Generation & Scoring Model (`lead_gen/`)
+
+A separate, **zero-dependency Python** package that identifies, scores, ranks and
+segments the world's largest energy consumers as sales prospects for Beyond Green
+Group's decarbonization offerings. It outputs a prioritized list of up to ~10,000
+leads with tiers (A/B/C), recommended offerings and estimated opportunity value,
+plus CSV / JSON / Markdown deliverables under `lead_gen/output/`.
+
+**Data integrity:** no reliable free public list of the real top 10,000 energy
+consumers exists, so the package blends a small **curated** set of genuine large
+consumers (flagged `public-estimate`, with approximate public figures) with
+clearly-labelled **synthetic** records (`synthetic`, generic templated names) —
+nothing fabricated is presented as a real named firm. It can also score a CSV of
+your **real** prospects with the same model.
+
+```bash
+python3 -m lead_gen.cli generate --count 10000     # full ranked list
+python3 -m lead_gen.cli score --input prospects.csv # score real prospects
+python3 -m unittest discover -s lead_gen/tests      # tests (no pip deps)
+```
+
+See [`lead_gen/README.md`](lead_gen/README.md) for the full scoring methodology,
+data model and usage.

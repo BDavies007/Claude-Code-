@@ -1,0 +1,217 @@
+{
+  "generated_at_utc": "2026-06-25T07:13:55.540498+00:00",
+  "total_leads": 10000,
+  "total_consumption_mwh": 81941251297.9,
+  "total_opportunity_value_usd": 225710193664.28,
+  "weights": {
+    "consumption": 0.3,
+    "decarbonization_gap": 0.2,
+    "grid_carbon": 0.15,
+    "sector_fit": 0.1,
+    "esg_pressure": 0.1,
+    "buying_window": 0.1,
+    "financial_capacity": 0.05
+  },
+  "by_tier": [
+    {
+      "key": "B",
+      "count": 8616,
+      "total_consumption_mwh": 63791965923.4,
+      "total_opportunity_value": 174850557717.26,
+      "avg_lead_score": 61.01
+    },
+    {
+      "key": "A",
+      "count": 984,
+      "total_consumption_mwh": 17605308069.5,
+      "total_opportunity_value": 49375702751.13,
+      "avg_lead_score": 72.71
+    },
+    {
+      "key": "C",
+      "count": 400,
+      "total_consumption_mwh": 543977305.0,
+      "total_opportunity_value": 1483933195.89,
+      "avg_lead_score": 47.73
+    }
+  ],
+  "by_sector": [
+    {
+      "key": "Data Center / Hyperscaler",
+      "count": 1385,
+      "total_consumption_mwh": 12798752136.9,
+      "total_opportunity_value": 45518652028.83,
+      "avg_lead_score": 62.69
+    },
+    {
+      "key": "Steel",
+      "count": 993,
+      "total_consumption_mwh": 15940789837.2,
+      "total_opportunity_value": 33724668937.19,
+      "avg_lead_score": 66.26
+    },
+    {
+      "key": "Aluminium",
+      "count": 488,
+      "total_consumption_mwh": 12648953831.5,
+      "total_opportunity_value": 26856085434.25,
+      "avg_lead_score": 66.22
+    },
+    {
+      "key": "Chemicals",
+      "count": 965,
+      "total_consumption_mwh": 9283184175.4,
+      "total_opportunity_value": 25177027160.62,
+      "avg_lead_score": 64.37
+    },
+    {
+      "key": "Semiconductor",
+      "count": 621,
+      "total_consumption_mwh": 7058664974.3,
+      "total_opportunity_value": 22876542289.48,
+      "avg_lead_score": 64.98
+    },
+    {
+      "key": "Mining & Metals",
+      "count": 735,
+      "total_consumption_mwh": 5713828596.6,
+      "total_opportunity_value": 17141367094.88,
+      "avg_lead_score": 62.89
+    },
+    {
+      "key": "Retail / E-commerce",
+      "count": 841,
+      "total_consumption_mwh": 3868791369.4,
+      "total_opportunity_value": 13822080948.61,
+      "avg_lead_score": 60.32
+    },
+    {
+      "key": "Oil & Gas",
+      "count": 501,
+      "total_consumption_mwh": 4928514475.0,
+      "total_opportunity_value": 12035127223.09,
+      "avg_lead_score": 64.21
+    },
+    {
+      "key": "Telecom",
+      "count": 618,
+      "total_consumption_mwh": 2232624273.9,
+      "total_opportunity_value": 7463540539.3,
+      "avg_lead_score": 58.73
+    },
+    {
+      "key": "Automotive Manufacturing",
+      "count": 772,
+      "total_consumption_mwh": 1812189507.6,
+      "total_opportunity_value": 5899015323.19,
+      "avg_lead_score": 57.3
+    },
+    {
+      "key": "Cement",
+      "count": 791,
+      "total_consumption_mwh": 2499659942.1,
+      "total_opportunity_value": 5382716326.35,
+      "avg_lead_score": 58.51
+    },
+    {
+      "key": "Pulp & Paper",
+      "count": 385,
+      "total_consumption_mwh": 1406662326.9,
+      "total_opportunity_value": 3922499359.18,
+      "avg_lead_score": 56.85
+    },
+    {
+      "key": "Food & Beverage",
+      "count": 524,
+      "total_consumption_mwh": 1072657726.0,
+      "total_opportunity_value": 3584850210.73,
+      "avg_lead_score": 56.74
+    },
+    {
+      "key": "Logistics & Warehousing",
+      "count": 186,
+      "total_consumption_mwh": 376946345.9,
+      "total_opportunity_value": 1374177125.42,
+      "avg_lead_score": 57.54
+    },
+    {
+      "key": "Pharmaceuticals",
+      "count": 195,
+      "total_consumption_mwh": 299031779.2,
+      "total_opportunity_value": 931843663.16,
+      "avg_lead_score": 54.38
+    }
+  ],
+  "by_region": [
+    {
+      "key": "North America",
+      "count": 2212,
+      "total_consumption_mwh": 18319001675.3,
+      "total_opportunity_value": 49915031629.71,
+      "avg_lead_score": 60.34
+    },
+    {
+      "key": "China",
+      "count": 1997,
+      "total_consumption_mwh": 16530277599.7,
+      "total_opportunity_value": 45748133491.73,
+      "avg_lead_score": 64.06
+    },
+    {
+      "key": "Europe",
+      "count": 1980,
+      "total_consumption_mwh": 15883220566.3,
+      "total_opportunity_value": 43706046280.81,
+      "avg_lead_score": 60.2
+    },
+    {
+      "key": "East Asia (ex-China)",
+      "count": 1023,
+      "total_consumption_mwh": 8044203023.5,
+      "total_opportunity_value": 22128698309.76,
+      "avg_lead_score": 62.35
+    },
+    {
+      "key": "India",
+      "count": 909,
+      "total_consumption_mwh": 7425762085.3,
+      "total_opportunity_value": 20330067668.57,
+      "avg_lead_score": 65.34
+    },
+    {
+      "key": "Latin America",
+      "count": 493,
+      "total_consumption_mwh": 4035514277.1,
+      "total_opportunity_value": 11063482365.41,
+      "avg_lead_score": 55.23
+    },
+    {
+      "key": "Southeast Asia",
+      "count": 450,
+      "total_consumption_mwh": 3542466496.6,
+      "total_opportunity_value": 9886958130.48,
+      "avg_lead_score": 61.69
+    },
+    {
+      "key": "Middle East",
+      "count": 422,
+      "total_consumption_mwh": 3391622734.4,
+      "total_opportunity_value": 9577748630.33,
+      "avg_lead_score": 61.64
+    },
+    {
+      "key": "Africa",
+      "count": 301,
+      "total_consumption_mwh": 2740986114.3,
+      "total_opportunity_value": 7847090269.28,
+      "avg_lead_score": 60.64
+    },
+    {
+      "key": "Oceania",
+      "count": 213,
+      "total_consumption_mwh": 2028196725.4,
+      "total_opportunity_value": 5506936888.2,
+      "avg_lead_score": 62.08
+    }
+  ]
+}
