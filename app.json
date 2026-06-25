@@ -1,0 +1,30 @@
+{
+  "id": "0b1f9c8a-7d6e-4c3b-9a21-5e4f3d2c1b0a",
+  "name": "Energy Management",
+  "publisher": "Beyond Green Group",
+  "version": "1.0.0.0",
+  "brief": "Energy management for Dynamics 365 Business Central.",
+  "description": "Track energy meters, readings, consumption, cost and CO2 emissions across electricity, gas, water and renewable sources.",
+  "privacyStatement": "",
+  "EULA": "",
+  "help": "",
+  "url": "https://github.com/BDavies007/Claude-Code-",
+  "logo": "",
+  "dependencies": [],
+  "screenshots": [],
+  "platform": "24.0.0.0",
+  "application": "24.0.0.0",
+  "idRanges": [
+    {
+      "from": 50100,
+      "to": 50199
+    }
+  ],
+  "contextSensitiveHelpUrl": "",
+  "showMyCode": true,
+  "runtime": "13.0",
+  "features": [
+    "NoImplicitWith",
+    "TranslationFile"
+  ]
+}
