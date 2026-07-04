@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Executive OS theme
+ * Dark navy canvas · white text · electric blue accents.
+ */
+@layer base {
+  :root {
+    --background: 218 60% 8%; /* deep navy */
+    --foreground: 210 40% 98%; /* near-white */
+
+    --card: 218 45% 12%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 218 46% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217 100% 59%; /* electric blue */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 33% 20%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 18%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 60% 22%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 32% 22%;
+    --input: 217 32% 22%;
+    --ring: 217 100% 59%;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+  /* Subtle ambient gradient behind the app shell */
+  .app-canvas {
+    background:
+      radial-gradient(
+        60rem 40rem at 15% -10%,
+        hsl(217 100% 59% / 0.08),
+        transparent 60%
+      ),
+      radial-gradient(
+        50rem 40rem at 100% 0%,
+        hsl(217 100% 59% / 0.05),
+        transparent 55%
+      ),
+      hsl(var(--background));
+  }
+}
+
+/* Thin, unobtrusive scrollbars */
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(217 32% 26%);
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
