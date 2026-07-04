@@ -155,6 +155,93 @@ export type AiAgent = {
   updated_at: string;
 }
 
+// ── Integrations (Phase 0) ──────────────────────────────────────────
+export type IntegrationProvider = "google";
+export type SyncConnector = "gcal" | "gmail" | "gdrive";
+
+export type IntegrationAccount = {
+  id: string;
+  user_id: string;
+  provider: IntegrationProvider;
+  email: string | null;
+  scopes: string[];
+  access_token: string | null;
+  refresh_token: string | null;
+  expires_at: string | null;
+  status: "connected" | "error" | "revoked";
+  connected_at: string;
+  updated_at: string;
+}
+
+export type SyncState = {
+  id: string;
+  user_id: string;
+  connector: SyncConnector;
+  cursor: string | null;
+  last_synced_at: string | null;
+  status: "idle" | "running" | "error";
+  last_error: string | null;
+  updated_at: string;
+}
+
+export type SyncRun = {
+  id: string;
+  user_id: string;
+  connector: SyncConnector;
+  started_at: string;
+  finished_at: string | null;
+  status: "running" | "success" | "error";
+  items_upserted: number;
+  error: string | null;
+}
+
+export type ExternalLink = {
+  id: string;
+  user_id: string;
+  provider: IntegrationProvider;
+  source: SyncConnector;
+  external_id: string;
+  entity_table: string;
+  entity_id: string;
+  raw: unknown;
+  synced_at: string;
+}
+
+export type Document = {
+  id: string;
+  user_id: string;
+  title: string;
+  source: string | null;
+  mime_type: string | null;
+  drive_file_id: string | null;
+  web_url: string | null;
+  content: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DocumentChunk = {
+  id: string;
+  user_id: string;
+  document_id: string;
+  chunk_index: number;
+  content: string;
+  created_at: string;
+}
+
+export type Suggestion = {
+  id: string;
+  user_id: string;
+  source: string;
+  kind: "task" | "contact";
+  title: string;
+  detail: string | null;
+  payload: Record<string, unknown>;
+  status: "pending" | "accepted" | "dismissed";
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Convenience joins ───────────────────────────────────────────────
 export type ContactWithCompany = Contact & { company: Company | null };
 export type MeetingWithCompany = Meeting & { company: Company | null };
@@ -185,6 +272,13 @@ export type Database = {
       risks: TableShape<Risk>;
       daily_briefs: TableShape<DailyBrief>;
       ai_agents: TableShape<AiAgent>;
+      integration_accounts: TableShape<IntegrationAccount>;
+      sync_state: TableShape<SyncState>;
+      sync_runs: TableShape<SyncRun>;
+      external_links: TableShape<ExternalLink>;
+      documents: TableShape<Document>;
+      document_chunks: TableShape<DocumentChunk>;
+      suggestions: TableShape<Suggestion>;
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };

@@ -1,0 +1,91 @@
+{
+  "name": "Executive OS — Google sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] }
+      },
+      "id": "schedule",
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EXEC_OS_BASE_URL }}/api/sync/gcal",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-secret", "value": "={{ $env.N8N_WEBHOOK_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"trigger\": \"schedule\" }",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "sync-gcal",
+      "name": "Sync Calendar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EXEC_OS_BASE_URL }}/api/sync/gdrive",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-secret", "value": "={{ $env.N8N_WEBHOOK_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"trigger\": \"schedule\" }",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "sync-gdrive",
+      "name": "Sync Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EXEC_OS_BASE_URL }}/api/sync/gmail",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-secret", "value": "={{ $env.N8N_WEBHOOK_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"trigger\": \"schedule\" }",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "sync-gmail",
+      "name": "Triage Gmail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 420]
+    }
+  ],
+  "connections": {
+    "Every 15 min": {
+      "main": [
+        [
+          { "node": "Sync Calendar", "type": "main", "index": 0 },
+          { "node": "Sync Drive", "type": "main", "index": 0 },
+          { "node": "Triage Gmail", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

@@ -62,11 +62,12 @@ This document is the contract we build against. Implementation is phased
    Scheduler (Vercel Cron / pg_cron)     AI brief (RAG + provider abstraction)
 ```
 
-**Where sync runs:** internal API routes under `src/app/api/sync/*`, invoked by
-(a) **Vercel Cron** (or Supabase scheduled Edge Functions) on an interval, and
-(b) **Google push webhooks** for freshness. Both paths call the same connector
-code — cron is the safety net, webhooks are the fast path. (n8n can later
-orchestrate multi-step flows, per the product spec, but is not required for v1.)
+**Where sync runs (decided): n8n is the orchestrator.** n8n owns scheduling and
+multi-step flows; it calls the app's internal API routes under
+`src/app/api/sync/*` (the same connector code either way). n8n handles cron
+triggers, Google push webhooks, retries, and fan-out; the Next.js app stays the
+system of record and exposes secured endpoints n8n drives. A "Sync now" button
+in Settings hits the same routes directly for local dev / manual runs.
 
 ---
 
@@ -79,8 +80,8 @@ tokens) and **incremental authorization** (add scopes as the user enables each
 connector).
 
 - **Scopes (read-only first):**
-  - `calendar.readonly`
-  - `gmail.readonly` (upgrade to `gmail.modify` only if we add label/triage writes)
+  - `calendar.readonly` (+ `calendar.events` later for two-way write-back)
+  - `gmail.modify` — **decided**: read + label triaged threads + create drafts
   - `drive.readonly` (or `drive.metadata.readonly` + per-file content on demand)
 - **Flow:** `GET /api/integrations/google/connect` → Google consent →
   `GET /api/integrations/google/callback` exchanges the code, stores tokens.
@@ -290,16 +291,18 @@ exist. Integration upgrades it from "structured data only" to **structured data
 
 ## 8. Scheduling & webhooks
 
-| Concern            | Choice                                                              |
+| Concern            | Choice (decided: **n8n orchestrator**)                              |
 | ------------------ | ------------------------------------------------------------------ |
-| Periodic sync      | **Vercel Cron** → `POST /api/sync/{connector}` (per user, batched) |
-| 07:00 brief        | **Vercel Cron** → brief generator                                  |
-| Freshness (push)   | Google **watch** channels → `POST /api/webhooks/google/{source}`   |
-| Heavy/async work   | Queue table + worker, or **n8n** for multi-step flows (spec)       |
+| Periodic sync      | **n8n schedule** → `POST /api/sync/{connector}` (per user, batched) |
+| 07:00 brief        | **n8n schedule** → `POST /api/daily-brief`                          |
+| Freshness (push)   | Google **watch** → n8n webhook → `POST /api/sync/{connector}`       |
+| Multi-step flows   | **n8n** (classify email → create suggestion → notify, etc.)         |
 | Local dev          | On-demand "Sync now" button in Settings → Integrations             |
 
-All scheduled routes authenticate with a shared secret (`CRON_SECRET`) and act
-per `user_id`; webhooks verify Google's channel token before enqueuing.
+All app endpoints n8n calls authenticate with a shared secret
+(`N8N_WEBHOOK_SECRET` / `CRON_SECRET`) and act per `user_id`; Google push
+webhooks (received by n8n) carry a channel token n8n verifies before calling in.
+Workflow templates and setup live in [`n8n/README.md`](../n8n/README.md).
 
 ---
 
@@ -369,15 +372,20 @@ EMBEDDINGS_MODEL=text-embedding-3-small
 
 ---
 
-## 13. Decisions to confirm before building
+## 13. Decisions (settled)
 
-1. **Hosting for sync/cron:** Vercel Cron + webhooks (recommended) vs. Supabase
-   Edge Functions + `pg_cron` vs. n8n as the primary orchestrator.
-2. **Embeddings provider:** OpenAI `text-embedding-3-small` (cheap, 1536-dim —
-   matches our `vector(1536)`) vs. another. Affects the Drive/RAG phases.
-3. **Gmail depth:** read-only suggestions only, or eventually labeling/drafts
-   (needs `gmail.modify`).
-4. **Multi-user vs. single-CEO:** the schema is multi-tenant (per `user_id`)
-   already; confirm we're building for one CEO now but keeping it multi-tenant.
+1. **Orchestration:** **n8n** owns scheduling, webhooks, retries, and multi-step
+   flows; the app exposes secured endpoints n8n drives. (§2, §8)
+2. **Embeddings:** **OpenAI `text-embedding-3-small`** (1536-dim, matches our
+   `vector(1536)` columns). Drive content + meeting notes are embedded on ingest.
+3. **Gmail depth:** **`gmail.modify`** — read, label triaged threads, and create
+   drafts. Task/contact creation from email stays human-in-the-loop.
+4. **Tenancy:** **multi-tenant, one CEO now** — every row is `user_id`-scoped
+   (already true); no rework needed to add users/an org later.
 
-Once these are settled I'll open **Phase 0 + 1** as the first implementation PR.
+**Foundation status:** `0002_integrations.sql`, typed models, the connector
+interface + registry, the Calendar→Meeting normalizer, the Settings →
+Integrations UI, the Google OAuth connect route, and n8n workflow templates are
+scaffolded (Phase 0). Live token exchange + sync require external setup
+(Google Cloud OAuth app, an n8n instance, provider keys) — see
+[`n8n/README.md`](../n8n/README.md) and §12.

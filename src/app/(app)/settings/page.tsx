@@ -1,4 +1,4 @@
-import { User, KeyRound, Sparkles, Database } from "lucide-react";
+import { User, KeyRound, Sparkles, Database, Plug } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/page-header";
 import {
@@ -10,25 +10,42 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProfileForm } from "@/components/settings/profile-form";
+import { IntegrationsPanel } from "@/components/settings/integrations-panel";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: { connected?: string; error?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, title, company_name")
-    .eq("id", user!.id)
-    .maybeSingle();
+  const [{ data: profile }, { data: googleAccount }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("full_name, title, company_name")
+      .eq("id", user!.id)
+      .maybeSingle(),
+    supabase
+      .from("integration_accounts")
+      .select("email, status")
+      .eq("user_id", user!.id)
+      .eq("provider", "google")
+      .maybeSingle(),
+  ]);
 
   const aiProvider = process.env.ANTHROPIC_API_KEY
     ? "Anthropic"
     : process.env.OPENAI_API_KEY
       ? "OpenAI"
       : "Local (no key)";
+
+  const googleNotice = searchParams.connected
+    ? "connected"
+    : (searchParams.error ?? null);
 
   return (
     <>
@@ -53,6 +70,26 @@ export default async function SettingsPage() {
                 fullName={profile?.full_name ?? ""}
                 title={profile?.title ?? ""}
                 companyName={profile?.company_name ?? ""}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Plug className="h-4 w-4 text-electric-400" /> Integrations
+              </CardTitle>
+              <CardDescription>
+                Connect Google to sync Calendar, Drive, and Gmail into your
+                command centre.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <IntegrationsPanel
+                connected={googleAccount?.status === "connected"}
+                email={googleAccount?.email ?? null}
+                configured={!!process.env.GOOGLE_CLIENT_ID}
+                notice={googleNotice}
               />
             </CardContent>
           </Card>
