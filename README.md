@@ -203,6 +203,15 @@ client generics for end-to-end type safety.
 
 ---
 
+## ☁️ Deploy
+
+Deploys cleanly to **Vercel** (Next.js auto-detected). See
+[`docs/DEPLOY.md`](docs/DEPLOY.md) for the full path — Supabase provisioning,
+environment variables, and auth redirect setup. Every push and PR runs CI
+(typecheck → lint → build) via `.github/workflows/ci.yml`.
+
+---
+
 ## 🗺 Roadmap (next integrations)
 
 Gmail triage · Google Calendar briefing · meeting-transcript processing ·
