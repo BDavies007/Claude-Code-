@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plug, Check, X } from "lucide-react";
+import { Loader2, Plug, Check, X, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CONNECTORS } from "@/lib/integrations/registry";
-import { disconnectGoogle } from "@/lib/actions/integrations";
+import { disconnectGoogle, syncNow } from "@/lib/actions/integrations";
+import type { SyncConnector } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
 const ACCENT: Record<string, string> = {
@@ -31,6 +32,8 @@ export function IntegrationsPanel({
 }: IntegrationsPanelProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState<SyncConnector | null>(null);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   async function disconnect() {
     if (!window.confirm("Disconnect Google? Synced data stays; new syncs stop."))
@@ -39,6 +42,19 @@ export function IntegrationsPanel({
     await disconnectGoogle();
     setBusy(false);
     router.refresh();
+  }
+
+  async function runSync(connector: SyncConnector) {
+    setSyncing(connector);
+    setSyncMsg(null);
+    const result = await syncNow(connector);
+    setSyncing(null);
+    if (result?.error) {
+      setSyncMsg(result.error);
+    } else {
+      setSyncMsg("Sync complete.");
+      router.refresh();
+    }
   }
 
   return (
@@ -119,12 +135,41 @@ export function IntegrationsPanel({
                 {c.description}
               </p>
             </div>
-            <Badge variant={connected ? "success" : "neutral"}>
-              {connected ? "Ready" : "Idle"}
-            </Badge>
+            {connected && c.live ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runSync(c.key)}
+                disabled={syncing !== null}
+              >
+                {syncing === c.key ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Sync now
+              </Button>
+            ) : (
+              <Badge variant={c.live ? "success" : "neutral"}>
+                {c.live ? (connected ? "Ready" : "Idle") : c.phase}
+              </Badge>
+            )}
           </li>
         ))}
       </ul>
+
+      {syncMsg && (
+        <p
+          className={cn(
+            "mt-3 rounded-md border px-3 py-2 text-sm",
+            syncMsg === "Sync complete."
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+              : "border-red-500/30 bg-red-500/10 text-red-400",
+          )}
+        >
+          {syncMsg}
+        </p>
+      )}
 
       <p className="mt-4 text-xs text-muted-foreground">
         Scheduling and multi-step flows run through n8n — see{" "}

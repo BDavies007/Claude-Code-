@@ -15,6 +15,9 @@ export interface ConnectorMeta {
   /** OAuth scopes this connector needs (decided in docs/INTEGRATIONS.md §3). */
   scopes: string[];
   accent: string;
+  /** Whether a live sync implementation exists (vs. planned for a later phase). */
+  live: boolean;
+  phase: string;
 }
 
 export const CONNECTORS: ConnectorMeta[] = [
@@ -27,6 +30,8 @@ export const CONNECTORS: ConnectorMeta[] = [
     target: "Meetings",
     scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
     accent: "sky",
+    live: true,
+    phase: "Live",
   },
   {
     key: "gdrive",
@@ -37,6 +42,8 @@ export const CONNECTORS: ConnectorMeta[] = [
     target: "Documents",
     scopes: ["https://www.googleapis.com/auth/drive.readonly"],
     accent: "emerald",
+    live: false,
+    phase: "Phase 2",
   },
   {
     key: "gmail",
@@ -48,6 +55,8 @@ export const CONNECTORS: ConnectorMeta[] = [
     // gmail.modify — decided: read + label + draft (docs/INTEGRATIONS.md §13).
     scopes: ["https://www.googleapis.com/auth/gmail.modify"],
     accent: "amber",
+    live: false,
+    phase: "Phase 4",
   },
 ];
 

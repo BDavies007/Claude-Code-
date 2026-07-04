@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser, guard } from "./helpers";
+import { runConnector, isConnectorLive } from "@/lib/integrations/orchestrator";
+import type { SyncConnector } from "@/lib/types/database";
 
 /** Disconnect Google: remove the stored grant for the current user. */
 export async function disconnectGoogle() {
@@ -17,17 +19,16 @@ export async function disconnectGoogle() {
   });
 }
 
-/** Trigger a manual sync for one connector (delegates to the sync endpoint). */
-export async function syncNow(connector: "gcal" | "gmail" | "gdrive") {
+/** Run a connector sync now for the signed-in user (same code n8n calls). */
+export async function syncNow(connector: SyncConnector) {
   return guard(async () => {
-    const { supabase, user } = await requireUser();
-    // Phase 0: record intent so the UI reflects a queued run. Phase 1 wires
-    // this to the live connector (n8n calls the same /api/sync route).
-    const { error } = await supabase.from("sync_state").upsert(
-      { user_id: user.id, connector, status: "running" },
-      { onConflict: "user_id,connector" },
-    );
-    if (error) throw new Error(error.message);
+    const { user } = await requireUser();
+    if (!isConnectorLive(connector)) {
+      throw new Error("This connector isn't live yet.");
+    }
+    await runConnector(connector, user.id);
     revalidatePath("/settings");
+    revalidatePath("/meetings");
+    revalidatePath("/dashboard");
   });
 }
