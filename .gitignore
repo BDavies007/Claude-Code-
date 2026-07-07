@@ -1,23 +1,32 @@
-### AL ###
-#Template for AL projects for Dynamics 365 Business Central
-#launch.json folder
+# Node / Electron / Vite
+node_modules/
+dist/
+dist-electron/
+out/
+release/
+*.log
+.npm/
+.cache/
+
+# Editor / OS
 .vscode/
-#Cache folder
+.idea/
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Legacy AL artifacts (kept from upstream template)
 .alcache/
-#Symbols folder
 .alpackages/
-#Snapshots folder
 .snapshots/
-#Testing Output folder
 .output/
-#Extension App-file
 *.app
-#Rapid Application Development File
 rad.json
-#Translation Base-file
 *.g.xlf
-#License-files
 *.bclicense
 *.flf
-#Test results file
 TestResults.xml
