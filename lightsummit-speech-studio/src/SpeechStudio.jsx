@@ -23,6 +23,8 @@ const TONES = [
 
 const WPM = 130; // spoken pace baseline
 
+const API_KEY_STORAGE = "lightsummit-anthropic-key";
+
 function wordCount(text) {
   return (text.trim().match(/\S+/g) || []).length;
 }
@@ -144,8 +146,18 @@ export default function SpeechStudio() {
   const [saved, setSaved] = useState([]);
   const [copied, setCopied] = useState(false);
   const [saveNote, setSaveNote] = useState("");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || "");
   const cancelSpeech = useRef(false);
   const synthOk = typeof window !== "undefined" && "speechSynthesis" in window;
+
+  const saveApiKey = (value) => {
+    setApiKey(value);
+    if (value.trim()) {
+      localStorage.setItem(API_KEY_STORAGE, value.trim());
+    } else {
+      localStorage.removeItem(API_KEY_STORAGE);
+    }
+  };
 
   // Load device voices (async on iOS)
   useEffect(() => {
@@ -182,6 +194,10 @@ export default function SpeechStudio() {
 
   const generate = async () => {
     setError("");
+    if (!apiKey.trim()) {
+      setError("Add your Anthropic API key below the brief before generating.");
+      return;
+    }
     if (!brief.eventName.trim() || !brief.points.trim()) {
       setError("Name the event and give at least one point to land. The script is only as good as the brief.");
       return;
@@ -204,7 +220,13 @@ Hard rules: the first two sentences must hook — a concrete number, a sharp cla
     try {
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey.trim(),
+          "anthropic-version": "2023-06-01",
+          // Opts in to Anthropic's CORS support — required for browser calls.
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
           max_tokens: 1000,
@@ -212,6 +234,9 @@ Hard rules: the first two sentences must hook — a concrete number, a sharp cla
         }),
       });
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error((data.error && data.error.message) || `HTTP ${response.status}`);
+      }
       const text = (data.content || [])
         .filter((b) => b.type === "text")
         .map((b) => b.text)
@@ -221,7 +246,9 @@ Hard rules: the first two sentences must hook — a concrete number, a sharp cla
       setScript(text);
       setTitle(brief.eventName);
     } catch (e) {
-      setError("Generation failed. Check the connection and run it again.");
+      setError(e && e.message && e.message !== "Empty response"
+        ? `Generation failed — ${e.message}`
+        : "Generation failed. Check the key and connection, then run it again.");
     } finally {
       setGenerating(false);
     }
@@ -401,6 +428,22 @@ Hard rules: the first two sentences must hook — a concrete number, a sharp cla
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="mb-6">
+            <label className={label} style={{ color: GRAPHITE }}>Anthropic API key</label>
+            <input
+              type="password"
+              className={field}
+              style={{ ...fieldStyle, fontFamily: CHROME.fontFamily, fontSize: "0.9rem" }}
+              value={apiKey}
+              onChange={(e) => saveApiKey(e.target.value)}
+              placeholder="sk-ant-…"
+              autoComplete="off"
+            />
+            <p className="mt-2 text-xs" style={{ color: GRAPHITE }}>
+              Stored only in this browser. Calls go straight from here to Anthropic — use a key you're happy to keep on this device.
+            </p>
           </div>
 
           <button
