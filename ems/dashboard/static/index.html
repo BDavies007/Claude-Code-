@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Site EMS</title>
+  <link rel="stylesheet" href="static/styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__inner">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true"></span>
+        <div class="brand__text">
+          <h1 id="site-name" class="brand__title">Site EMS</h1>
+          <p class="brand__sub">Energy management</p>
+        </div>
+      </div>
+      <div class="topbar__meta">
+        <div class="clock" title="Simulation clock (site local time)">
+          <span class="clock__label">Sim time</span>
+          <time id="sim-clock" class="clock__value">--</time>
+        </div>
+        <span id="mode-badge" class="badge" data-mode="">--</span>
+        <span id="conn" class="conn" data-state="connecting" role="status">
+          <span class="conn__dot" aria-hidden="true"></span><span id="conn-text">Connecting</span>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="tiles" aria-label="Live power flows">
+      <article class="tile tile--pv">
+        <h2 class="tile__label">Solar PV</h2>
+        <p class="tile__value"><span id="v-pv">--</span></p>
+        <p class="tile__sub" id="s-pv">&nbsp;</p>
+      </article>
+      <article class="tile tile--load">
+        <h2 class="tile__label">Site load</h2>
+        <p class="tile__value"><span id="v-load">--</span></p>
+        <p class="tile__sub">Building demand</p>
+      </article>
+      <article class="tile tile--ev">
+        <h2 class="tile__label">EV charging</h2>
+        <p class="tile__value"><span id="v-ev">--</span></p>
+        <p class="tile__sub">Fleet chargers</p>
+      </article>
+      <article class="tile tile--battery">
+        <h2 class="tile__label">Battery</h2>
+        <p class="tile__value"><span id="v-batt">--</span></p>
+        <p class="tile__sub"><span id="s-batt" class="flowtag">--</span></p>
+        <div class="soc">
+          <div class="soc__bar" role="progressbar" id="soc-bar" aria-label="Battery state of charge"
+               aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="soc__fill" id="soc-fill"></div>
+          </div>
+          <span class="soc__text" id="soc-text">-- %</span>
+        </div>
+      </article>
+      <article class="tile tile--grid">
+        <h2 class="tile__label">Grid</h2>
+        <p class="tile__value"><span id="v-grid">--</span></p>
+        <p class="tile__sub"><span id="s-grid" class="flowtag">--</span></p>
+        <p class="tile__price" id="s-price">&nbsp;</p>
+      </article>
+    </section>
+
+    <section class="panel controls" aria-label="Controls">
+      <div class="field">
+        <label for="mode-select">Control mode</label>
+        <select id="mode-select">
+          <option value="optimised">Optimised (MPC)</option>
+          <option value="self_consumption">Self-consumption</option>
+          <option value="peak_shaving">Peak shaving</option>
+          <option value="tou_arbitrage">Time-of-use arbitrage</option>
+          <option value="idle">Idle (battery off)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="speed-select">Sim speed</label>
+        <select id="speed-select">
+          <option value="60">1 min / s</option>
+          <option value="300">5 min / s</option>
+          <option value="900">15 min / s</option>
+          <option value="3600">1 h / s</option>
+        </select>
+      </div>
+      <div class="field field--buttons">
+        <span class="field__label" id="sim-label">Simulation</span>
+        <div class="btn-row" role="group" aria-labelledby="sim-label">
+          <button type="button" id="play-btn" class="btn btn--primary" aria-pressed="false">Play</button>
+          <button type="button" id="step-btn" class="btn">Step +1h</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="preset-select">Site preset</label>
+        <div class="btn-row">
+          <select id="preset-select"></select>
+          <button type="button" id="reset-btn" class="btn">Reset</button>
+        </div>
+      </div>
+      <p id="control-msg" class="control-msg" role="status" aria-live="polite"></p>
+    </section>
+
+    <div class="grid-2">
+      <section class="panel chart-panel" aria-labelledby="chart-title">
+        <div class="panel__head">
+          <h2 id="chart-title" class="panel__title">Power, last 24 h</h2>
+          <span class="panel__hint">kW (left) · SoC % (right) · import price band</span>
+        </div>
+        <div class="chart-wrap chart-wrap--main">
+          <canvas id="power-chart" aria-label="Power flows over the last 24 hours" role="img"></canvas>
+        </div>
+        <p class="chart-fallback" id="chart-fallback" hidden>Chart library unavailable. Live values are still shown above.</p>
+      </section>
+
+      <aside class="side">
+        <section class="panel decision" aria-labelledby="decision-title">
+          <h2 id="decision-title" class="panel__title">Latest decision</h2>
+          <p id="decision" class="decision__text" aria-live="polite">Waiting for the controller…</p>
+          <p id="decision-meta" class="decision__meta"></p>
+        </section>
+
+        <section class="panel kpis" aria-labelledby="kpi-title">
+          <div class="panel__head">
+            <h2 id="kpi-title" class="panel__title">Performance, last 24 h</h2>
+            <span id="kpi-period" class="panel__hint"></span>
+          </div>
+          <p id="kpi-msg" class="kpi-msg" hidden>Collecting data…</p>
+          <dl class="kpi-list" id="kpi-list">
+            <div class="kpi kpi--wide">
+              <dt>Savings vs no battery</dt>
+              <dd><span id="k-savings" class="kpi__big">--</span> <span id="k-savings-pct" class="kpi__pct"></span></dd>
+            </div>
+            <div class="kpi">
+              <dt>Cost</dt>
+              <dd><span id="k-cost">--</span><small id="k-cost-base">baseline --</small></dd>
+            </div>
+            <div class="kpi">
+              <dt>Peak import</dt>
+              <dd><span id="k-peak">--</span><small id="k-peak-base">baseline --</small></dd>
+            </div>
+            <div class="kpi">
+              <dt>Self-sufficiency</dt>
+              <dd><span id="k-ss">--</span></dd>
+            </div>
+            <div class="kpi">
+              <dt>Self-consumption</dt>
+              <dd><span id="k-sc">--</span></dd>
+            </div>
+            <div class="kpi">
+              <dt>CO₂</dt>
+              <dd><span id="k-co2">--</span><small id="k-co2-base">baseline --</small></dd>
+            </div>
+            <div class="kpi">
+              <dt>Battery cycles</dt>
+              <dd><span id="k-cycles">--</span><small id="k-through">--</small></dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="panel forecast" aria-labelledby="fc-title">
+          <div class="panel__head">
+            <h2 id="fc-title" class="panel__title">Forecast, next 24 h</h2>
+          </div>
+          <div class="chart-wrap chart-wrap--mini">
+            <canvas id="forecast-chart" aria-label="PV and demand forecast for the next 24 hours" role="img"></canvas>
+          </div>
+          <p class="panel__hint" id="fc-msg"></p>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p>Signs: battery + discharging / − charging · grid + import / − export</p>
+  </footer>
+</body>
+</html>
