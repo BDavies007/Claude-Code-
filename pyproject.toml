@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "site-ems"
+version = "0.1.0"
+description = "Site energy management system for C&I sites: PV, battery, EV charging and grid, with a built-in simulator."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  "pydantic>=2.6",
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+site-ems = "ems.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["ems*"]
+
+[tool.setuptools.package-data]
+"ems.dashboard" = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
