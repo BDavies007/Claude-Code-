@@ -248,3 +248,19 @@ def test_retail_profile_open_on_sunday() -> None:
     rows = [sim.step(_cmd(), 3600, IDLE) for _ in range(24)]
     assert rows[13].load_kw > 80    # 14:00 local, open
     assert rows[2].load_kw < 30     # 03:00 local, closed
+
+
+def test_observe_reads_preceding_interval_without_side_effects() -> None:
+    start = datetime(2026, 6, 3, 12, 0, tzinfo=timezone.utc)  # weekday midday
+    sim = SiteSimulator(demo_warehouse(), start)
+    reading = sim.observe(300, ControlMode.IDLE)
+    assert reading.timestamp == start - timedelta(seconds=300)
+    assert reading.battery_kw == 0.0 and reading.battery_soc == sim.soc
+    assert reading.pv_kw > 0 and reading.load_kw > 0
+    assert abs(reading.balance_error_kw()) <= POWER_BALANCE_TOLERANCE_KW
+    assert reading.grid_kw >= -demo_warehouse().grid.export_limit_kw - 1e-9
+    assert sim.now == start
+    twin = SiteSimulator(demo_warehouse(), start)
+    assert sim.step(_cmd(), 300, ControlMode.IDLE) == twin.step(_cmd(), 300, ControlMode.IDLE)
+    with pytest.raises(ValueError):
+        sim.observe(0, ControlMode.IDLE)

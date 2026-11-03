@@ -10,6 +10,7 @@ import pytest
 
 from ems.control import (Controller, OptimisedController, make_controller, power_limits,
                          solve_schedule)
+from ems.control.base import GRID_CHARGE_MARGIN_FRACTION
 from ems.models import ControlMode, ControllerContext, DispatchCommand, Forecast, SiteConfig, Telemetry
 from ems.presets import demo_warehouse
 
@@ -128,10 +129,11 @@ def test_peak_shaving_recharges_below_target() -> None:
 def test_tou_charges_at_night_and_discharges_at_peak() -> None:
     cfg = cfg_()
     c = make_controller(ControlMode.TOU_ARBITRAGE, cfg)
-    # 01:00 UTC = 02:00 BST, night band: charge from grid, capped so import stays at the
-    # peak target (300 kW) ...
+    # 01:00 UTC = 02:00 BST, night band: charge from grid, capped so import stays a
+    # small margin under the peak target (300 kW) ...
     night = c.decide(ctx_(cfg, telem(cfg, DAY0 + timedelta(hours=1), pv=0, load=100, soc=0.3)))
-    assert night.battery_kw == pytest.approx(-(cfg.peak_target_kw - 100))
+    margin = GRID_CHARGE_MARGIN_FRACTION * cfg.peak_target_kw
+    assert night.battery_kw == pytest.approx(-(cfg.peak_target_kw - margin - 100))
     assert "cheapest" in night.reason
     # ... and at full power when the site has no peak target
     free = cfg.model_copy(update={"peak_target_kw": None})
@@ -333,3 +335,99 @@ def test_peak_shaving_loop_caps_import() -> None:
     assert ps_peak <= cfg.peak_target_kw + 1e-6
     _, opt_peak = _run_loop(ControlMode.OPTIMISED, heavy)
     assert opt_peak < idle_peak
+
+
+def test_peak_shaving_spends_energy_above_reserve_in_dearest_band() -> None:
+    """Above the shaving reserve, peak shaving covers demand in the dearest band."""
+    from datetime import datetime, timezone
+
+    from ems.control import make_controller
+    from ems.models import ControlMode, ControllerContext, Telemetry
+    from ems.presets import demo_warehouse
+
+    cfg = demo_warehouse()
+    ctrl = make_controller(ControlMode.PEAK_SHAVING, cfg)
+
+    def ctx(soc: float, hour_utc: int) -> ControllerContext:
+        ts = datetime(2026, 6, 3, hour_utc, 0, tzinfo=timezone.utc)
+        t = Telemetry(timestamp=ts, pv_kw=0.0, pv_curtailed_kw=0.0, load_kw=150.0, ev_kw=0.0,
+                      battery_kw=0.0, battery_soc=soc, grid_kw=150.0,
+                      import_price_gbp_per_kwh=0.38, export_price_gbp_per_kwh=0.08,
+                      mode=ControlMode.PEAK_SHAVING)
+        return ControllerContext(telemetry=t, forecast=None, config=cfg, step_seconds=300)
+
+    # 16:00 UTC -> 17:05 BST decision time: dearest (peak) band.
+    full = ctrl.decide(ctx(0.95, 16))
+    assert 0 < full.battery_kw <= 150.0 + 1e-9
+    # At or below the reserve the battery is held for shaving.
+    held = ctrl.decide(ctx(0.50, 16))
+    assert held.battery_kw <= 1e-9
+    # Outside the dearest band (day band, 10:00 BST) a full battery just holds.
+    day = ctrl.decide(ctx(0.95, 9))
+    assert day.battery_kw == 0.0
+
+
+# ------------------------------------------------------------------ peak-target guards on grid charging
+
+def test_peak_shaving_grid_charging_keeps_margin_below_target() -> None:
+    """Cheap-band recharging must leave headroom for load noise (regression)."""
+    cfg = cfg_()
+    target = cfg.peak_target_kw
+    assert target is not None
+    c = make_controller(ControlMode.PEAK_SHAVING, cfg)
+    ts = DAY0 + timedelta(hours=1)                          # night (cheapest) band
+    cmd = c.decide(ctx_(cfg, telem(cfg, ts, pv=0, load=100, soc=0.3)))
+    assert cmd.battery_kw == pytest.approx(-(target * (1 - GRID_CHARGE_MARGIN_FRACTION) - 100))
+    # With a forecast of higher demand for the coming interval, charge less.
+    fc = make_forecast(cfg, ts + timedelta(minutes=5), [0.0] * 96, [180.0] * 96)
+    cmd_fc = c.decide(ctx_(cfg, telem(cfg, ts, pv=0, load=100, soc=0.3), fc))
+    assert cmd_fc.battery_kw == pytest.approx(-(target * (1 - GRID_CHARGE_MARGIN_FRACTION) - 180))
+
+
+def test_peak_shaving_uses_forecast_to_anticipate_step_up() -> None:
+    """Measured demand under target but forecast above it: shave in advance."""
+    cfg = cfg_()
+    target = cfg.peak_target_kw
+    assert target is not None
+    c = make_controller(ControlMode.PEAK_SHAVING, cfg)
+    ts = DAY0 + timedelta(hours=5)
+    t = telem(cfg, ts, pv=0, load=280, soc=0.9)
+    assert c.decide(ctx_(cfg, t)).battery_kw <= 0          # reactive: sees 280 < 300
+    fc = make_forecast(cfg, ts + timedelta(minutes=5), [0.0] * 96, [330.0] * 96)
+    assert c.decide(ctx_(cfg, t, fc)).battery_kw == pytest.approx(330 - target)
+
+
+def test_tou_grid_charging_uses_forecast_net_and_margin() -> None:
+    cfg = cfg_()
+    target = cfg.peak_target_kw
+    assert target is not None
+    c = make_controller(ControlMode.TOU_ARBITRAGE, cfg)
+    ts = DAY0 + timedelta(hours=1)
+    fc = make_forecast(cfg, ts + timedelta(minutes=5), [0.0] * 96, [150.0] * 96)
+    cmd = c.decide(ctx_(cfg, telem(cfg, ts, pv=0, load=100, soc=0.3), fc))
+    assert cmd.battery_kw == pytest.approx(-(target * (1 - GRID_CHARGE_MARGIN_FRACTION) - 150))
+
+
+def test_optimised_grid_charging_capped_by_measured_demand() -> None:
+    """Open-loop planned charging must not push import over the target (regression).
+
+    The forecast says 100 kW, so the plan charges hard overnight; but the last meter
+    reading was 250 kW, so only 300 - 250 = 50 kW of charging fits under the target.
+    """
+    cfg = cfg_()
+    target = cfg.peak_target_kw
+    assert target is not None
+    start = DAY0 + timedelta(hours=4)                       # 05:00 BST, night band
+    fc = make_forecast(cfg, start, [0.0] * 96, [100.0] * 96)
+    c = make_controller(ControlMode.OPTIMISED, cfg)
+    low = c.decide(ctx_(cfg, telem(cfg, start - timedelta(minutes=5), load=100,
+                                   soc=cfg.battery.min_soc), fc))
+    assert low.battery_kw < -(target - 250)                 # plan wants more than 50 kW
+    high = c.decide(ctx_(cfg, telem(cfg, start - timedelta(minutes=5), load=250,
+                                    soc=cfg.battery.min_soc), fc))
+    assert high.battery_kw == pytest.approx(-(target - 250))
+    # Forecast above the measurement: the forecast bounds charging instead.
+    fc_high = make_forecast(cfg, start, [0.0] * 96, [270.0] * 96)
+    cmd = c.decide(ctx_(cfg, telem(cfg, start - timedelta(minutes=5), load=100,
+                                   soc=cfg.battery.min_soc), fc_high))
+    assert -(target - 270) - 1e-6 <= cmd.battery_kw <= 0

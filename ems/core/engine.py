@@ -36,6 +36,9 @@ DEFAULT_START = datetime(2026, 6, 1, tzinfo=timezone.utc)
 FORECAST_HORIZON_HOURS = 24.0
 FORECAST_STEP_MINUTES = 15
 SUBSCRIBER_QUEUE_SIZE = 256
+FORECAST_MODES = frozenset({ControlMode.OPTIMISED, ControlMode.PEAK_SHAVING,
+                            ControlMode.TOU_ARBITRAGE})
+"""Modes whose controllers read ``ctx.forecast``; the engine builds one only for these."""
 _PAUSE_POLL_SECONDS = 0.1
 _ERROR_BACKOFF_SECONDS = 1.0
 
@@ -44,7 +47,7 @@ class EMSEngine:
     """Runs a site's energy-management control loop against the site simulator.
 
     Each :meth:`step` builds a :class:`ControllerContext` from the latest telemetry
-    (plus a forecast when the mode is OPTIMISED), asks the active controller for a
+    (plus a forecast when the mode is in :data:`FORECAST_MODES`), asks the active controller for a
     :class:`DispatchCommand`, advances the simulator by ``step_seconds`` and records
     the resulting :class:`Telemetry` in a bounded history.
 
@@ -92,6 +95,11 @@ class EMSEngine:
     def sim_time(self) -> datetime:
         """Current simulation time (UTC)."""
         return self._sim.now
+
+    @property
+    def soc(self) -> float:
+        """Current battery state of charge (0..1)."""
+        return self._sim.soc
 
     @property
     def start_time(self) -> datetime:
@@ -150,25 +158,22 @@ class EMSEngine:
     # ------------------------------------------------------------------ stepping
 
     def _initial_telemetry(self) -> Telemetry:
-        """Synthesise a zero-flow sample for the interval just before ``now``.
+        """Bootstrap sample for the interval just before ``now`` (battery idle).
 
-        Its timestamp is ``now - step_seconds`` so that controllers which derive
-        the decision time as ``telemetry.timestamp + step_seconds`` act on ``now``.
+        Reads the simulator's meters over the preceding ``step_seconds`` so the first
+        decision sees realistic site flows (a zero-flow sample would let e.g. peak
+        shaving grid-charge at full power on top of the real load). Its timestamp is
+        ``now - step_seconds`` so that controllers which derive the decision time as
+        ``telemetry.timestamp + step_seconds`` act on ``now``.
         """
-        ts = self._sim.now - timedelta(seconds=self.step_seconds)
-        tariff = self.config.tariff
-        return Telemetry(
-            timestamp=ts, pv_kw=0.0, pv_curtailed_kw=0.0, load_kw=0.0, ev_kw=0.0,
-            battery_kw=0.0, battery_soc=self._sim.soc, grid_kw=0.0,
-            import_price_gbp_per_kwh=tariff.import_price_at(ts, self.config.timezone),
-            export_price_gbp_per_kwh=tariff.export_price_gbp_per_kwh, mode=self.mode)
+        return self._sim.observe(self.step_seconds, self.mode)
 
     def step(self) -> Telemetry:
         """Run one control interval and return the resulting telemetry."""
         with self._lock:
             latest = self._history[-1] if self._history else self._initial_telemetry()
             forecast: Forecast | None = None
-            if self.mode == ControlMode.OPTIMISED:
+            if self.mode in FORECAST_MODES:
                 forecast = self._sim.forecast(FORECAST_HORIZON_HOURS, FORECAST_STEP_MINUTES)
             ctx = ControllerContext(telemetry=latest, forecast=forecast, config=self.config,
                                     step_seconds=self.step_seconds)
@@ -200,6 +205,10 @@ class EMSEngine:
     def kpis(self, last_hours: float | None = None) -> KPIs:
         """KPIs over the recorded history, or over its final ``last_hours`` of sim time.
 
+        A windowed query includes every recorded interval that overlaps the window
+        (whole control intervals), so a window shorter than ``step_seconds`` still
+        returns the latest interval rather than nothing.
+
         Raises:
             ValueError: if there is no history (in the requested window).
         """
@@ -212,7 +221,8 @@ class EMSEngine:
             if items:
                 end = items[-1].timestamp + timedelta(seconds=self.step_seconds)
                 cutoff = end - timedelta(hours=last_hours)
-                items = [t for t in items if t.timestamp >= cutoff]
+                step = timedelta(seconds=self.step_seconds)
+                items = [t for t in items if t.timestamp + step > cutoff]
         if not items:
             raise ValueError("no telemetry history yet")
         return compute_kpis(items, config, self.step_seconds)

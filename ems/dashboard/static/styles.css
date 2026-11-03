@@ -167,6 +167,7 @@ h1, h2, p, dl, dd { margin: 0; }
 .panel__hint { font-size: 0.75rem; color: var(--text-muted); }
 
 .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gutter); }
+.main-col { display: flex; flex-direction: column; gap: var(--gutter); min-width: 0; }
 .side { display: flex; flex-direction: column; gap: var(--gutter); min-width: 0; }
 
 @media (min-width: 1024px) {
@@ -254,12 +255,14 @@ select { width: 100%; min-width: 0; }
 .btn--primary:hover { filter: brightness(1.08); border-color: var(--accent); }
 
 .control-msg { grid-column: 1 / -1; font-size: 0.8rem; color: var(--text-muted); min-height: 1.2em; }
+.control-msg:empty { display: none; }
 .control-msg[data-kind="error"] { color: var(--bad); }
 
 /* ---------------------------------------------------------------- charts */
 .chart-wrap { position: relative; width: 100%; }
 .chart-wrap--main { height: 340px; }
 .chart-wrap--mini { height: 170px; }
+@media (min-width: 1024px) { .chart-wrap--main { height: 400px; } .chart-wrap--mini { height: 200px; } }
 @media (max-width: 599px) { .chart-wrap--main { height: 280px; } }
 .chart-fallback { font-size: 0.85rem; color: var(--text-muted); }
 

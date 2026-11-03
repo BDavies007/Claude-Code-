@@ -10,12 +10,15 @@ requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.110",
   "uvicorn>=0.29",
+  "websockets>=12",
   "pydantic>=2.6",
   "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
+# Optional WebSocket backend for uvicorn, enabling live push on /ws/telemetry.
+live = ["websockets>=12"]
 
 [project.scripts]
 site-ems = "ems.__main__:main"

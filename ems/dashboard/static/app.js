@@ -364,9 +364,14 @@
         el.presetSel.value = status.site_id;
       }
     }
-    if (prev && prev.site_id !== status.site_id && !state.reloadingSite) {
-      // Site changed underneath us (reset from another client).
-      reloadSite();
+    if (prev && !state.reloadingSite) {
+      const prevTime = parseTs(prev.sim_time);
+      const nowTime = parseTs(status.sim_time);
+      if (prev.site_id !== status.site_id
+          || (prevTime !== null && nowTime !== null && nowTime < prevTime)) {
+        // Site changed or the sim clock went back: a reset, possibly by another client.
+        reloadSite();
+      }
     }
   }
 
@@ -397,24 +402,37 @@
     queueRender();
   }
 
+  /** True when two telemetry samples carry the same measured values (a replay). */
+  function sameSample(a, b) {
+    if (!a || !b) return false;
+    const keys = ["pv_kw", "load_kw", "ev_kw", "battery_kw", "battery_soc", "grid_kw"];
+    return a.mode === b.mode && keys.every((k) => a[k] === b[k]);
+  }
+
+  /**
+   * The simulation was restarted (possibly by another client): the sim clock went
+   * back, so everything held for the old run is stale. Reload the whole site view.
+   */
+  function onClockRewind() {
+    if (state.reloadingSite) return;
+    reloadSite();
+  }
+
   /**
    * Append a telemetry sample. Returns false if it indicates the sim clock went
-   * backwards (e.g. a reset), in which case history is reloaded.
+   * backwards (e.g. a reset, here or from another client), in which case the site
+   * view is reloaded. Exact replays of samples already held are ignored.
    */
   function appendTelemetry(t) {
     const ts = parseTs(t && t.timestamp);
     if (ts === null) return true;
     if (state.lastTs !== null && ts <= state.lastTs) {
-      const first = state.points.length ? parseTs(state.points[0].timestamp) : null;
-      if (first !== null && ts < first) {
-        reloadHistory();
-        return false;
-      }
-      if (ts === state.lastTs) {
-        state.points[state.points.length - 1] = t;  // replace duplicate
-        queueRender();
-      }
-      return true;
+      const held = state.points.find((p) => parseTs(p.timestamp) === ts);
+      if (held && sameSample(held, t)) return true;  // duplicate delivery
+      // Samples of one run arrive in order, so an older (or same-time but different)
+      // sample can only come from a new run.
+      onClockRewind();
+      return false;
     }
     state.points.push(t);
     const max = windowSize();
@@ -531,7 +549,7 @@
     const opts = baseChartOptions(p);
     opts.scales = {
       x: {
-        ticks: { color: p.text, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, font: { size: 11 } },
+        ticks: { color: p.text, maxRotation: 0, autoSkip: true, autoSkipPadding: 16, maxTicksLimit: 8, font: { size: 11 } },
         grid: { color: withAlpha(p.border, 0.6), display: false },
       },
       y: {
@@ -580,7 +598,7 @@
     opts.plugins.legend.labels.padding = 8;
     opts.scales = {
       x: {
-        ticks: { color: p.text, maxRotation: 0, autoSkip: true, maxTicksLimit: 6, font: { size: 10 } },
+        ticks: { color: p.text, maxRotation: 0, autoSkip: true, autoSkipPadding: 14, maxTicksLimit: 6, font: { size: 10 } },
         grid: { display: false },
       },
       y: {
@@ -721,8 +739,11 @@
         } catch (_) {
           appendTelemetry(latest);
         }
-      } else if (ts !== null && state.points.length && ts < parseTs(state.points[0].timestamp)) {
-        reloadHistory();
+      } else if (ts !== null && state.lastTs !== null && ts < state.lastTs) {
+        onClockRewind();  // reset (here or by another client): latest is older than ours
+      } else if (ts !== null && ts === state.lastTs && state.points.length
+                 && !sameSample(state.points[state.points.length - 1], latest)) {
+        onClockRewind();  // a new run has reached exactly our newest timestamp
       }
     };
     state.pollTimer = setInterval(tick, POLL_INTERVAL_MS);
@@ -732,6 +753,20 @@
   function stopPolling() {
     clearInterval(state.pollTimer);
     state.pollTimer = null;
+  }
+
+  /**
+   * Ask /api/health whether the server can accept WebSocket upgrades.
+   * Older servers that do not report it are assumed to support it.
+   * @returns {Promise<boolean>}
+   */
+  async function serverSupportsWebSocket() {
+    try {
+      const h = await api("api/health");
+      return !(h && h.websocket === false);
+    } catch (_) {
+      return true;
+    }
   }
 
   function connectWs() {
@@ -920,7 +955,14 @@
     await reloadHistory();
     refreshKpis();
     refreshForecast();
-    connectWs();
+    if (await serverSupportsWebSocket()) {
+      connectWs();
+    } else {
+      // The server cannot upgrade to WebSocket (no protocol library installed):
+      // poll instead of attempting handshakes that are bound to fail.
+      setConn("polling", "Polling");
+      startPolling();
+    }
     setInterval(refreshKpis, KPI_INTERVAL_MS);
     // Status (decision reason, run state) refresh; polling mode refreshes faster on its own.
     state.statusTimer = setInterval(() => { if (state.wsLive) refreshStatus(); }, STATUS_INTERVAL_MS);

@@ -24,7 +24,8 @@ from numpy.typing import NDArray
 
 from ems.models import ControlMode, ControllerContext, DispatchCommand, Forecast, SiteConfig
 
-from .base import _EPS, describe_kw, one_way_efficiency, power_limits, self_consumption_command, site_net_kw
+from .base import (_EPS, describe_kw, grid_charge_cap_kw, one_way_efficiency, power_limits,
+                   self_consumption_command, site_net_kw)
 from .rules import peak_target_kw
 
 #: Penalty on import above the peak target, GBP per kW per hour above target.
@@ -169,7 +170,9 @@ class OptimisedController:
     The DP plan fixes the intent for the coming interval. When the plan is to hold
     the grid at zero (self-consume) or at the peak target (shave), the setpoint
     tracks the *measured* net demand so forecast error and SoC-grid quantisation do
-    not leak to the grid; otherwise the planned power is applied directly.
+    not leak to the grid; otherwise the planned power is applied directly, except
+    that planned grid charging is capped so the expected import stays at or below
+    the peak target (see :func:`~ems.control.base.grid_charge_cap_kw`).
     """
 
     mode = ControlMode.OPTIMISED
@@ -197,8 +200,10 @@ class OptimisedController:
         target = cfg.peak_target_kw
 
         if abs(planned_b) <= _EPS:
-            return DispatchCommand(battery_kw=0.0,
-                                   reason=f"optimised: holding; plan imports {planned_g:.0f} kW")
+            flow = (f"plan imports {planned_g:.0f} kW" if planned_g >= 0.5
+                    else f"plan exports {-planned_g:.0f} kW" if planned_g <= -0.5
+                    else "grid balanced")
+            return DispatchCommand(battery_kw=0.0, reason=f"optimised: holding; {flow}")
         if abs(planned_g) <= tol:
             sp = lim.clamp(net_meas)
             verb = "charging" if sp < 0 else "discharging"
@@ -211,6 +216,15 @@ class OptimisedController:
                                           f"discharging {describe_kw(sp)}")
         sp = lim.clamp(planned_b)
         if sp < 0:
+            # Planned grid charging is open-loop on the forecast; never let it push the
+            # expected import (the higher of measured and forecast net demand) over the
+            # peak target or the import limit. No extra margin: the plan already
+            # aims below the target, this only catches forecast error.
+            sp = max(sp, -max(grid_charge_cap_kw(ctx, target, margin_fraction=0.0), -net_meas))
+        if abs(sp) < 0.5:  # would read as "0 kW"
+            reason = (f"optimised: holding battery at {ctx.telemetry.battery_soc:.0%} SoC "
+                      f"(£{fc.import_price[0]:.2f}/kWh now)")
+        elif sp < 0:
             price = fc.import_price[0]
             reason = f"optimised: charging {describe_kw(sp)} at £{price:.2f}/kWh ahead of dearer periods"
         else:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib.util
 import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -16,7 +17,7 @@ from ems.core import EMSEngine
 from ems.models import ControlMode, EngineStatus, Forecast, KPIs, SiteConfig, Telemetry
 from ems.presets import PRESETS, demo_warehouse
 
-__all__ = ["create_app", "STATIC_DIR", "ResetRequest", "ModeRequest", "SimRequest",
+__all__ = ["create_app", "websocket_supported", "STATIC_DIR", "ResetRequest", "ModeRequest", "SimRequest",
            "StepRequest"]
 
 logger = logging.getLogger(__name__)
@@ -56,14 +57,24 @@ class StepRequest(_Request):
     steps: int = Field(default=1, ge=1, le=MAX_STEPS_PER_REQUEST)
 
 
-def create_app(engine: EMSEngine | None = None, autostart: bool = True) -> FastAPI:
+def websocket_supported() -> bool:
+    """True if uvicorn can serve WebSockets here (``websockets`` or ``wsproto`` installed)."""
+    return any(importlib.util.find_spec(name) is not None for name in ("websockets", "wsproto"))
+
+
+def create_app(engine: EMSEngine | None = None, autostart: bool = True,
+               websocket: bool | None = None) -> FastAPI:
     """Build the EMS web application.
 
     Args:
         engine: the engine to serve; defaults to ``EMSEngine(demo_warehouse())``.
         autostart: start the engine's background loop during application lifespan.
+        websocket: whether the hosting server can accept WebSocket upgrades, as
+            reported by ``/api/health`` so the dashboard can skip straight to
+            polling; ``None`` detects it with :func:`websocket_supported`.
     """
     eng = engine if engine is not None else EMSEngine(demo_warehouse())
+    ws_ok = websocket_supported() if websocket is None else bool(websocket)
 
     @contextlib.asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -79,9 +90,9 @@ def create_app(engine: EMSEngine | None = None, autostart: bool = True) -> FastA
     app.state.engine = eng
 
     @app.get("/api/health")
-    async def health() -> dict[str, str]:
-        """Liveness probe."""
-        return {"status": "ok"}
+    async def health() -> dict[str, str | bool]:
+        """Liveness probe; ``websocket`` says whether ``/ws/telemetry`` can be used."""
+        return {"status": "ok", "websocket": ws_ok}
 
     @app.get("/api/status", response_model=EngineStatus)
     async def status() -> EngineStatus:
@@ -131,7 +142,8 @@ def create_app(engine: EMSEngine | None = None, autostart: bool = True) -> FastA
     @app.post("/api/mode", response_model=EngineStatus)
     async def set_mode(body: ModeRequest) -> EngineStatus:
         """Switch the control mode (422 on an unknown mode)."""
-        eng.set_mode(body.mode)
+        # set_mode waits for any in-flight step; keep the event loop free meanwhile.
+        await asyncio.to_thread(eng.set_mode, body.mode)
         return eng.status()
 
     @app.post("/api/sim", response_model=EngineStatus)

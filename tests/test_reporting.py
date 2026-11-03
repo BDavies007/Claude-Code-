@@ -1,13 +1,15 @@
 """Tests for ems.reporting with hand-computed expectations."""
 from __future__ import annotations
 
+import math
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from ems.models import (BatteryConfig, ControlMode, GridConfig, LoadConfig, PVConfig,
                         SiteConfig, Tariff, TariffBand, Telemetry)
-from ems.reporting import compare_kpis, compute_kpis
+from ems.reporting import battery_inventory, compare_kpis, compute_kpis
 
 T0 = datetime(2026, 6, 1, tzinfo=timezone.utc)
 HOUR = 3600.0
@@ -92,7 +94,10 @@ def test_battery_shifting_saves_vs_baseline() -> None:
     k = compute_kpis(hist, make_config(), HOUR)
     assert k.cost_gbp == pytest.approx(0.0)
     assert k.baseline_cost_gbp == pytest.approx(4 * 0.30 - 4 * 0.05)  # 1.00
-    assert k.savings_gbp == pytest.approx(1.00)
+    # The battery stored 4*eta kWh but drew 4/eta kWh: it ends 4/eta - 4*eta kWh
+    # emptier, valued at the cheapest import price (0.20) * eta.
+    # (4*eta - 4/eta) * 0.20 * eta = 0.20 * (4*0.9 - 4) = -0.08
+    assert k.savings_gbp == pytest.approx(1.00 - 0.08)
     assert k.self_consumption_pct == pytest.approx(100.0)
     assert k.self_sufficiency_pct == pytest.approx(100.0)
     assert k.battery_throughput_kwh == pytest.approx(4.0)
@@ -124,8 +129,9 @@ def test_standing_charge() -> None:
 
 def test_peak_shaving_vs_baseline_peak_and_demand_savings() -> None:
     # Load 50 kW, battery discharges 20 -> grid 30. Baseline peak 50.
+    # Free energy, so the stored energy spent carries no value: only demand matters.
     hist = [sample(0, load=50, battery=20, price=0.0), sample(1, load=10, price=0.0)]
-    k = compute_kpis(hist, make_config(demand=73.0), HOUR)
+    k = compute_kpis(hist, make_config(demand=73.0, import_price=0.0), HOUR)
     assert k.peak_import_kw == pytest.approx(30.0)
     assert k.baseline_peak_import_kw == pytest.approx(50.0)
     # demand: 73 * peak * 2/730 = 0.2 * peak
@@ -200,3 +206,42 @@ def test_compare_kpis_table() -> None:
     widths = {len(line) for line in lines[2:]}
     assert max(widths) == len(lines[1])  # columns align to the rule
     assert compare_kpis({}) == "(no results)"
+
+
+# ------------------------------------------------------------------ battery inventory
+
+def test_savings_value_stored_energy_left_in_battery() -> None:
+    """Filling the battery is not a loss: the energy is still there at the end.
+
+    Regression: savings used to ignore the change in stored energy, so a run that
+    ended fuller (e.g. peak shaving topping up overnight) showed large negative
+    savings, and one that drained the battery was credited with energy bought
+    before the period.
+    """
+    eta = math.sqrt(0.9)
+    cfg = make_config(import_price=0.10, capacity=100.0)
+    # 1 h charging 10 kW from the grid at 0.10 on top of a 5 kW load.
+    fill = compute_kpis([sample(0, load=5, battery=-10, price=0.10)], cfg, HOUR)
+    assert fill.cost_gbp == pytest.approx(1.50)
+    assert fill.baseline_cost_gbp == pytest.approx(0.50)
+    stored = 10 * eta                                     # kWh now in the battery
+    assert fill.savings_gbp == pytest.approx(-1.00 + stored * 0.10 * eta)  # -0.10 (losses)
+    inv = battery_inventory([sample(0, load=5, battery=-10)], cfg, HOUR)
+    assert inv.stored_delta_kwh == pytest.approx(stored)
+    assert inv.reference_price_gbp_per_kwh == pytest.approx(0.10 * eta)
+    # Draining it again later is not a windfall either.
+    drain = compute_kpis([sample(0, load=10, battery=10, price=0.10)], cfg, HOUR)
+    assert drain.cost_gbp == pytest.approx(0.0)
+    assert drain.baseline_cost_gbp == pytest.approx(1.00)
+    assert drain.savings_gbp == pytest.approx(1.00 - 10 / eta * 0.10 * eta)  # 0.0
+
+
+def test_inventory_uses_cheapest_band_and_is_zero_without_battery() -> None:
+    cfg = make_config(capacity=10.0).model_copy(update={"tariff": Tariff(
+        bands=[TariffBand(name="night", start_hour=0, end_hour=7, import_price_gbp_per_kwh=0.08),
+               TariffBand(name="day", start_hour=7, end_hour=24, import_price_gbp_per_kwh=0.30)],
+        export_price_gbp_per_kwh=0.05)})
+    inv = battery_inventory([sample(0, battery=-4)], cfg, HOUR)
+    assert inv.reference_price_gbp_per_kwh == pytest.approx(0.08 * math.sqrt(0.9))
+    none = battery_inventory([sample(0, battery=-4)], make_config(capacity=0.0), HOUR)
+    assert none.value_gbp == 0.0 and none.stored_delta_kwh == 0.0

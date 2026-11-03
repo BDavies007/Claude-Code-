@@ -14,6 +14,10 @@ from ems.models import ControlMode, ControllerContext, DispatchCommand, SiteConf
 
 _EPS = 1e-9
 
+#: Safety margin (fraction of the peak target) kept below the target when charging
+#: from the grid, so load noise within an interval does not push import over it.
+GRID_CHARGE_MARGIN_FRACTION = 0.03
+
 
 @runtime_checkable
 class Controller(Protocol):
@@ -55,6 +59,46 @@ def site_net_kw(ctx: ControllerContext) -> float:
     """
     t = ctx.telemetry
     return t.load_kw + t.ev_kw - (t.pv_kw + t.pv_curtailed_kw)
+
+
+def forecast_net_kw(ctx: ControllerContext) -> float | None:
+    """Forecast site net demand (load + EV - available PV) for the coming interval.
+
+    Returns ``None`` when the context carries no usable forecast.
+    """
+    fc = ctx.forecast
+    if fc is None or not fc.load_kw or not fc.pv_kw:
+        return None
+    return fc.load_kw[0] - fc.pv_kw[0]
+
+
+def expected_net_kw(ctx: ControllerContext) -> float:
+    """Conservative (higher) estimate of next-interval net demand.
+
+    The larger of the measured net demand of the last interval and the forecast for
+    the coming one, so a step up in demand is anticipated rather than seen one
+    interval late. Falls back to the measured value without a forecast.
+    """
+    net = site_net_kw(ctx)
+    fc = forecast_net_kw(ctx)
+    return net if fc is None else max(net, fc)
+
+
+def grid_charge_cap_kw(ctx: ControllerContext, target_kw: float | None,
+                       margin_fraction: float = GRID_CHARGE_MARGIN_FRACTION) -> float:
+    """Largest charge power (>= 0) that keeps expected import below the peak target.
+
+    Uses :func:`expected_net_kw` and keeps ``margin_fraction`` of the target as
+    headroom; also respects the grid import limit against that estimate. PV surplus
+    (negative expected net demand) can always be absorbed. With no target only the
+    import limit applies.
+    """
+    est = expected_net_kw(ctx)
+    cap = max(0.0, ctx.config.grid.import_limit_kw - est)
+    if target_kw is not None:
+        margin = margin_fraction * max(target_kw, 0.0)
+        cap = min(cap, max(0.0, target_kw - margin - est, -est))
+    return cap
 
 
 def power_limits(ctx: ControllerContext, net_kw: float | None = None,

@@ -149,6 +149,41 @@ class SiteSimulator:
         self._now = self._now + timedelta(seconds=dt_seconds)
         return telemetry
 
+    def observe(self, window_seconds: float, mode: ControlMode) -> Telemetry:
+        """Meter reading for the ``window_seconds`` just before ``now``, with the battery idle.
+
+        Used to bootstrap a controller before the first :meth:`step` (a real EMS
+        reads its meters before its first dispatch). PV and building load are the
+        true averages over ``[now - window, now)``; EV is the unconstrained demand of
+        vehicles plugged in at ``now``. Export is limited by curtailing PV, the
+        import limit by shedding EV. Does not change any simulator state.
+        """
+        if not window_seconds > 0 or not math.isfinite(window_seconds):
+            raise ValueError("window_seconds must be a positive finite number")
+        cfg = self.config
+        t1 = self._now.timestamp()
+        t0 = t1 - window_seconds
+        samples = sample_grid(t0, window_seconds)
+        pv_avail = float(np.mean(self._pv_kw(samples)))
+        load = float(np.mean(self._load_kw(samples)))
+        ev = self._ev.clone().demand_kw(t1, t1 + window_seconds)
+        ev = max(0.0, min(ev, cfg.grid.import_limit_kw - (load - pv_avail)))
+        pv = min(pv_avail, load + ev + cfg.grid.export_limit_kw)
+        ts = self._now - timedelta(seconds=window_seconds)
+        return Telemetry(
+            timestamp=ts,
+            pv_kw=pv,
+            pv_curtailed_kw=pv_avail - pv,
+            load_kw=load,
+            ev_kw=ev,
+            battery_kw=0.0,
+            battery_soc=self._soc,
+            grid_kw=load + ev - pv,
+            import_price_gbp_per_kwh=cfg.tariff.import_price_at(ts, cfg.timezone),
+            export_price_gbp_per_kwh=cfg.tariff.export_price_gbp_per_kwh,
+            mode=mode,
+        )
+
     def forecast(self, horizon_hours: float = 24, step_minutes: int = 15) -> Forecast:
         """Noisy forecast of the next ``horizon_hours`` starting at ``now``.
 

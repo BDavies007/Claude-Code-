@@ -107,6 +107,7 @@
     </section>
 
     <div class="grid-2">
+      <div class="main-col">
       <section class="panel chart-panel" aria-labelledby="chart-title">
         <div class="panel__head">
           <h2 id="chart-title" class="panel__title">Power, last 24 h</h2>
@@ -117,6 +118,17 @@
         </div>
         <p class="chart-fallback" id="chart-fallback" hidden>Chart library unavailable. Live values are still shown above.</p>
       </section>
+
+        <section class="panel forecast" aria-labelledby="fc-title">
+          <div class="panel__head">
+            <h2 id="fc-title" class="panel__title">Forecast, next 24 h</h2>
+          </div>
+          <div class="chart-wrap chart-wrap--mini">
+            <canvas id="forecast-chart" aria-label="PV and demand forecast for the next 24 hours" role="img"></canvas>
+          </div>
+          <p class="panel__hint" id="fc-msg"></p>
+        </section>
+      </div>
 
       <aside class="side">
         <section class="panel decision" aria-labelledby="decision-title">
@@ -163,15 +175,6 @@
           </dl>
         </section>
 
-        <section class="panel forecast" aria-labelledby="fc-title">
-          <div class="panel__head">
-            <h2 id="fc-title" class="panel__title">Forecast, next 24 h</h2>
-          </div>
-          <div class="chart-wrap chart-wrap--mini">
-            <canvas id="forecast-chart" aria-label="PV and demand forecast for the next 24 hours" role="img"></canvas>
-          </div>
-          <p class="panel__hint" id="fc-msg"></p>
-        </section>
       </aside>
     </div>
   </main>

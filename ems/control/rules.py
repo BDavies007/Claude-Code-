@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from ems.models import ControlMode, ControllerContext, DispatchCommand, SiteConfig
 
-from .base import (_EPS, decision_time, describe_kw, power_limits, self_consumption_command,
-                   site_net_kw)
+from .base import (_EPS, decision_time, describe_kw, expected_net_kw, grid_charge_cap_kw,
+                   one_way_efficiency, power_limits, self_consumption_command, site_net_kw)
 
 #: Fraction of the import limit used as the shaving target when the site has none.
 DEFAULT_PEAK_TARGET_FRACTION = 0.8
@@ -60,9 +60,13 @@ class PeakShavingController:
     """Hold grid import at or below ``peak_target_kw``.
 
     Discharges whenever net demand (measured, or the forecast for the coming interval
-    if that is higher) exceeds the target. Below the target it recharges,
-    preferring PV surplus, then the cheapest tariff band (up to the target), and only
-    tops up gently from the grid elsewhere when the reserve is low.
+    if that is higher; the engine supplies the forecast in this mode) exceeds the
+    target. Below the target it recharges, preferring PV surplus, then the cheapest
+    tariff band (up to the target less a small safety margin, see
+    :func:`~ems.control.base.grid_charge_cap_kw`), and only
+    tops up gently from the grid elsewhere when the reserve is low. In the dearest
+    tariff band, energy above the shaving reserve (half the usable SoC window) is
+    used to cover site demand, so the cheap-band top-up is not left idle.
     """
 
     mode = ControlMode.PEAK_SHAVING
@@ -75,12 +79,9 @@ class PeakShavingController:
         """Shave import above target or recharge below it."""
         cfg = ctx.config
         target = peak_target_kw(cfg)
-        net = site_net_kw(ctx)
-        fc = ctx.forecast
-        if fc is not None and fc.load_kw and fc.pv_kw:
-            # Anticipate a step up in demand in the coming interval (e.g. a shift start
-            # or EV arrivals) rather than reacting one interval late.
-            net = max(net, fc.load_kw[0] - fc.pv_kw[0])
+        # Anticipate a step up in demand in the coming interval (e.g. a shift start
+        # or EV arrivals) rather than reacting one interval late.
+        net = expected_net_kw(ctx)
         lim = power_limits(ctx, net)
         if net > target + _EPS:
             sp = lim.clamp(net - target)
@@ -91,8 +92,9 @@ class PeakShavingController:
                 reason = f"peak shaving: discharging {describe_kw(sp)} to hold import at {target:.0f} kW"
             return DispatchCommand(battery_kw=sp, reason=reason)
 
-        # At or below target: recharge without pushing import above target.
-        headroom = max(0.0, target - net)          # extra charge before hitting target
+        # At or below target: recharge without pushing import above target (with a
+        # margin, so load noise during the interval does not cause an overshoot).
+        headroom = grid_charge_cap_kw(ctx, target)
         if net < 0:
             sp = lim.clamp(net)                    # absorb PV surplus first
             if sp < -_EPS:
@@ -101,16 +103,30 @@ class PeakShavingController:
             return DispatchCommand(battery_kw=0.0, reason="peak shaving: PV surplus, battery full")
 
         price = cfg.tariff.import_price_at(decision_time(ctx), cfg.timezone)
-        if price <= _cheapest_price(cfg) + _EPS:
+        bat = cfg.battery
+        window = max(bat.max_soc - bat.min_soc, _EPS)
+        reserve = (ctx.telemetry.battery_soc - bat.min_soc) / window
+        cheap, dear = _cheapest_price(cfg), _dearest_price(cfg)
+        if price >= dear - _EPS and dear - cheap > _EPS and reserve > PEAK_RESERVE_FRACTION:
+            # Stack value: energy above the shaving reserve covers site demand in the
+            # dearest band (it was bought in the cheap band), never exporting.
+            spare_kwh = (reserve - PEAK_RESERVE_FRACTION) * window * bat.capacity_kwh
+            dt_h = max(ctx.step_seconds, 1.0) / 3600.0
+            spare_kw = spare_kwh * one_way_efficiency(cfg) / dt_h
+            sp = lim.clamp(min(net, spare_kw))
+            if sp > _EPS:
+                return DispatchCommand(
+                    battery_kw=sp,
+                    reason=(f"peak shaving: discharging {describe_kw(sp)} of energy above the "
+                            "shaving reserve in the dearest band"))
+
+        if price <= cheap + _EPS:
             sp = lim.clamp(-headroom)
             if sp < -_EPS:
                 return DispatchCommand(battery_kw=sp,
                                        reason=f"peak shaving: recharging {describe_kw(sp)} in cheap band")
             return DispatchCommand(battery_kw=0.0, reason="peak shaving: cheap band, battery full")
 
-        bat = cfg.battery
-        window = max(bat.max_soc - bat.min_soc, _EPS)
-        reserve = (ctx.telemetry.battery_soc - bat.min_soc) / window
         if reserve < PEAK_RESERVE_FRACTION:
             sp = lim.clamp(-min(headroom, PEAK_RESERVE_CHARGE_FRACTION * bat.max_charge_kw))
             if sp < -_EPS:
@@ -144,9 +160,9 @@ class TouArbitrageController:
         lim = power_limits(ctx, net)
         if price <= cheap + _EPS:
             charge = lim.max_charge_kw
-            if cfg.peak_target_kw is not None:
-                # Grid charging must not create a new import peak above the target.
-                charge = min(charge, max(0.0, cfg.peak_target_kw - net, -net))
+            # Grid charging must not create a new import peak above the target (with
+            # a margin for load noise) nor exceed the import limit.
+            charge = min(charge, max(grid_charge_cap_kw(ctx, cfg.peak_target_kw), -net))
             sp = -charge
             if sp < -_EPS:
                 return DispatchCommand(battery_kw=sp,

@@ -6,6 +6,8 @@ sample length (``step_seconds / 3600`` hours). Sign conventions follow
 """
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Sequence
 
@@ -38,6 +40,50 @@ def _cost(import_kw: np.ndarray, export_kw: np.ndarray, import_price: np.ndarray
     return energy - credit + demand + standing
 
 
+@dataclass(frozen=True)
+class BatteryInventory:
+    """Change in energy stored in the battery over a telemetry history.
+
+    Attributes:
+        stored_delta_kwh: stored (DC-side) energy at the end minus at the start of
+            the period; +ve when the battery ends fuller than it started.
+        reference_price_gbp_per_kwh: price per stored kWh used to value the change
+            (cheapest import price times the one-way discharge efficiency).
+        value_gbp: ``stored_delta_kwh * reference_price_gbp_per_kwh``.
+    """
+
+    stored_delta_kwh: float
+    reference_price_gbp_per_kwh: float
+    value_gbp: float
+
+
+def battery_inventory(history: Sequence[Telemetry], config: SiteConfig,
+                      step_seconds: float) -> BatteryInventory:
+    """Value the change in stored battery energy between the start and end of ``history``.
+
+    The change is integrated from the battery power trace with the simulator's
+    efficiency model (charging stores ``kW * eta``, discharging draws ``kW / eta``,
+    ``eta = sqrt(round_trip_efficiency)``), so it does not depend on the SoC before
+    the first sample being recorded. Stored energy is valued at the cheapest import
+    price times ``eta``: what it would cost to put it back in the cheapest band,
+    expressed as AC energy it can deliver. This matches the optimiser's terminal value.
+
+    Args:
+        history: telemetry samples of ``step_seconds`` each.
+        config: site configuration (tariff, battery efficiency and capacity).
+        step_seconds: length of each sample interval in seconds.
+    """
+    if config.battery.capacity_kwh <= 0 or not history:
+        return BatteryInventory(0.0, 0.0, 0.0)
+    h = step_seconds / 3600.0
+    eta = math.sqrt(config.battery.round_trip_efficiency)
+    battery = np.array([t.battery_kw for t in history], dtype=float)
+    stored = np.where(battery > 0, -battery / eta, -battery * eta) * h
+    delta = float(np.sum(stored))
+    price = min(b.import_price_gbp_per_kwh for b in config.tariff.bands) * eta
+    return BatteryInventory(delta, price, delta * price)
+
+
 def compute_kpis(history: Sequence[Telemetry], config: SiteConfig, step_seconds: float) -> KPIs:
     """Compute site KPIs, including a no-battery baseline, over a telemetry history.
 
@@ -62,6 +108,12 @@ def compute_kpis(history: Sequence[Telemetry], config: SiteConfig, step_seconds:
         * ``self_sufficiency_pct`` = ``(1 - import / (load + ev)) * 100``,
           clamped to [0, 100] (grid-charging a battery can push import above demand).
         * Percentages are 0 when their denominator is 0.
+        * ``savings_gbp`` = ``baseline_cost_gbp - cost_gbp`` plus the value of the
+          change in stored battery energy over the period (see
+          :func:`battery_inventory`). Without it a run that ends with a fuller
+          battery is charged for energy it still holds, and one that drains the
+          battery is credited with energy bought before the period. ``cost_gbp``
+          remains the plain bill.
     """
     if not history:
         raise ValueError("cannot compute KPIs from an empty history")
@@ -121,7 +173,7 @@ def compute_kpis(history: Sequence[Telemetry], config: SiteConfig, step_seconds:
         baseline_peak_import_kw=float(np.max(base_imp)),
         cost_gbp=cost,
         baseline_cost_gbp=baseline_cost,
-        savings_gbp=baseline_cost - cost,
+        savings_gbp=baseline_cost - cost + battery_inventory(history, config, step_seconds).value_gbp,
         co2_kg=import_kwh * carbon,
         baseline_co2_kg=base_import_kwh * carbon,
         battery_throughput_kwh=throughput,

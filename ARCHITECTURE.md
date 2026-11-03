@@ -65,6 +65,7 @@ def make_controller(mode: ControlMode, config: SiteConfig) -> Controller: ...
 - IDLE: battery 0.
 - SELF_CONSUMPTION: net = load+ev-pv from latest telemetry; charge on surplus, discharge on deficit.
 - PEAK_SHAVING: discharge to keep grid import ≤ `peak_target_kw`; recharge below target, preferring PV surplus/cheap hours.
+  In the dearest tariff band, energy above a shaving reserve (half the usable SoC window) covers site demand.
 - TOU_ARBITRAGE: charge at max in the cheapest band (target max_soc), discharge in the dearest band; self-consume otherwise.
 - OPTIMISED: model-predictive control. Each call solves a cost-minimising schedule over the forecast
   horizon (dynamic programming over a discretised SoC grid, numpy only) with objective
@@ -104,19 +105,25 @@ class EMSEngine:
     def start(self) / async stop(self)           # manage the background task
     def reset(self, config: SiteConfig | None = None) -> None
 ```
-Default start = 2026-06-01T00:00Z (deterministic). Also `ems/__main__.py` CLI:
+Default start = 2026-06-01T00:00Z (deterministic). Before the first step the engine
+bootstraps the controller with `SiteSimulator.observe(step_seconds, mode)`: a meter reading
+of the preceding interval with the battery idle, timestamped `now - step_seconds`. Also `ems/__main__.py` CLI:
 - `python -m ems serve [--host 0.0.0.0 --port 8000 --site demo-warehouse --speed 300]`
 - `python -m ems simulate --site demo-warehouse --days 7 --mode optimised` → prints KPI table
   comparing every ControlMode on the same site (each run with a fresh engine).
 
 ### `ems/api/` — `ems.api.create_app`
 ```python
-def create_app(engine: EMSEngine | None = None, autostart: bool = True) -> FastAPI
+def create_app(engine: EMSEngine | None = None, autostart: bool = True,
+               websocket: bool | None = None) -> FastAPI
 ```
+`websocket` is reported by `/api/health` (auto-detected when `None`: true if uvicorn has a
+WebSocket backend, i.e. `websockets` or `wsproto`, installed via the optional `[live]` extra).
+The dashboard polls `/api/status` + `/api/history` instead of opening the socket when it is false.
 JSON endpoints (all under `/api`), payloads are the models' JSON:
 | Method | Path | Body / query | Returns |
 |---|---|---|---|
-| GET | `/api/health` | | `{"status":"ok"}` |
+| GET | `/api/health` | | `{"status":"ok","websocket":true}` |
 | GET | `/api/status` | | `EngineStatus` |
 | GET | `/api/config` | | `SiteConfig` |
 | GET | `/api/presets` | | `list[str]` |
@@ -133,7 +140,7 @@ JSON endpoints (all under `/api`), payloads are the models' JSON:
 ### `ems/dashboard/static/` — `index.html`, `app.js`, `styles.css`
 Vanilla JS, no build step, Chart.js 4.4.1 from cdnjs (exact version pinned). Shows: live
 power-flow tiles (PV, load, EV, battery+SoC, grid), mode selector, sim speed/run controls,
-24 h stacked power chart + SoC line, tariff price band, KPI panel (cost vs baseline, savings,
+24 h power chart (unstacked lines, since battery and grid are signed) + SoC line, tariff price band, KPI panel (cost vs baseline, savings,
 self-sufficiency, peak import vs baseline, CO2), last decision reason. Light/dark via
 `prefers-color-scheme`. Works at phone width. Uses only the endpoints above.
 
